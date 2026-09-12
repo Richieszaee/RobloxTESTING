@@ -1,79 +1,167 @@
--- STEAL PRO MAX V2 - FIX GUI
-local P = game:GetService("Players")
-local TS = game:GetService("TweenService")
-local RS = game:GetService("ReplicatedStorage")
-local WS = game:GetService("Workspace")
+-- STEAL LITE OLD GUI + BEST RARITY
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Workspace = game:GetService("Workspace")
 local UIS = game:GetService("UserInputService")
-local LP = P.LocalPlayer
+local LP = Players.LocalPlayer
 
-local CFG = {AutoSteal = false, TweenSpeed = 550, BasePoint = nil, TargetPlayer = nil}
-local RARITY_ORDER = {["Eternal"]=10,["Divine"]=9,["Secret"]=8,["Cosmic"]=7,["Mythic"]=6,["Legendary"]=5,["Epic"]=4,["Rare"]=3,["Uncommon"]=2,["Common"]=1}
-local Remote = RS:FindFirstChild("StealEgg") or RS:FindFirstChild("Interact") or RS:FindFirstChild("Collect")
-local C = {BG=Color3.fromRGB(10,10,10), Panel=Color3.fromRGB(17,17,17), Card=Color3.fromRGB(24,24,24), Btn=Color3.fromRGB(34,34,34), Txt=Color3.fromRGB(242,242,242), On=Color3.fromRGB(0,200,80), Off=Color3.fromRGB(200,40,40)}
+local AutoSteal = false
+local BasePoint = nil
+local TweenSpeed = 500
+local TargetPlayer = nil
 
--- HAPUS GUI LAMA DULU BIAR GA DOUBLE
-if LP.PlayerGui:FindFirstChild("PRO_MAX_HUB") then LP.PlayerGui.PRO_MAX_HUB:Destroy() end
+-- URUTAN RARITY
+local RARITY_ORDER = {
+    ["Eternal"] = 10, ["Divine"] = 9, ["Secret"] = 8, ["Cosmic"] = 7,
+    ["Mythic"] = 6, ["Legendary"] = 5, ["Epic"] = 4, ["Rare"] = 3,
+    ["Uncommon"] = 2, ["Common"] = 1
+}
 
-local gui = Instance.new("ScreenGui")
-gui.Name="PRO_MAX_HUB"; gui.ResetOnSpawn=false; gui.ZIndexBehavior=Enum.ZIndexBehavior.Sibling
-gui.Parent = LP:WaitForChild("PlayerGui") -- PENTING PAKE WAITFOR
+local InteractRemote = ReplicatedStorage:FindFirstChild("StealEgg") or ReplicatedStorage:FindFirstChild("Interact")
 
-local main = Instance.new("Frame", gui)
-main.Size=UDim2.new(0,540,0,360); main.Position=UDim2.new(0.5,-270,0.5,-180)
-main.BackgroundColor3=C.BG; main.BorderSizePixel=0; main.Active=true; main.Draggable=true
-Instance.new("UICorner",main).CornerRadius=UDim.new(0,12)
-Instance.new("UIStroke",main).Color=Color3.fromRGB(255,200,0)
+-- GUI LAMA
+local gui = Instance.new("ScreenGui", LP.PlayerGui)
+gui.Name = "StealLiteHub"
+gui.ResetOnSpawn = false
 
-local side = Instance.new("Frame", main)
-side.Size=UDim2.new(0,120,1,-20); side.Position=UDim2.new(0,10,0,10)
-side.BackgroundColor3=C.Panel; Instance.new("UICorner",side).CornerRadius=UDim.new(0,10)
+local Main = Instance.new("Frame", gui)
+Main.Size = UDim2.new(0, 260, 0, 280) -- dibesarin dikit
+Main.Position = UDim2.new(0, 20, 0, 20)
+Main.BackgroundColor3 = Color3.fromRGB(12, 12, 16)
+Main.BorderSizePixel = 0
+Main.Active = true
+Main.Draggable = true
+Instance.new("UICorner", Main).CornerRadius = UDim.new(0,12)
+local gradient = Instance.new("UIGradient", Main)
+gradient.Color = ColorSequence.new{ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 180, 0)),ColorSequenceKeypoint.new(1, Color3.fromRGB(0, 180, 255))}
+gradient.Rotation = 45
+Instance.new("UIStroke", Main).Color = Color3.fromRGB(255,255,255).Transparency = 0.3
 
-local content = Instance.new("Frame", main)
-content.Size=UDim2.new(1,-150,1,-20); content.Position=UDim2.new(0,140,0,10)
-content.BackgroundColor3=C.Panel; Instance.new("UICorner",content).CornerRadius=UDim.new(0,10)
+Instance.new("TextLabel", Main).Size = UDim2.new(1,-40,0,35).Position = UDim2.new(0,10,0,5)
+.Parent.Text = "STEAL LITE".Parent.TextColor3 = Color3.new(1,1,1)
+.Parent.Font = Enum.Font.GothamBlack.Parent.TextSize = 16
+.Parent.BackgroundTransparency = 1.Parent.TextXAlignment = Enum.TextXAlignment.Left
 
-local title = Instance.new("TextLabel",content)
-title.Size=UDim2.new(1,-20,0,30); title.Position=UDim2.new(0,10,0,10)
-title.BackgroundColor3=C.Card; title.Text="◈ STEAL PRO MAX"; title.TextColor3=C.Txt
-title.Font=Enum.Font.GothamBold; title.TextSize=13; Instance.new("UICorner",title).CornerRadius=UDim.new(0,6)
+-- SET BASE
+local setBtn = Instance.new("TextButton", Main)
+setBtn.Size = UDim2.new(1,-20,0,40) setBtn.Position = UDim2.new(0,10,0,45)
+setBtn.Text = "SET BASE POINT" setBtn.BackgroundColor3 = Color3.fromRGB(25,25,35)
+setBtn.TextColor3 = Color3.new(1,1,1) setBtn.Font = Enum.Font.GothamBold setBtn.TextSize = 14
+Instance.new("UICorner", setBtn).CornerRadius = UDim.new(0,8)
+setBtn.MouseButton1Click:Connect(function()
+	local hrp = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
+	if hrp then BasePoint = hrp.CFrame + Vector3.new(0,3,0) setBtn.Text = "✓ SAVED" task.wait(0.8) setBtn.Text = "SET BASE POINT" end
+end)
 
-local close = Instance.new("TextButton",content) -- TOMBOL CLOSE BARU
-close.Size=UDim2.new(0,24,0,24); close.Position=UDim2.new(1,-34,0,13)
-close.BackgroundColor3=C.Btn; close.Text="✕"; close.TextColor3=C.Txt
-close.Font=Enum.Font.GothamBold; close.TextSize=11; Instance.new("UICorner",close).CornerRadius=UDim.new(0,5)
-close.MouseButton1Click:Connect(function() gui:Destroy() end)
+-- AUTO STEAL
+local autoBtn = Instance.new("TextButton", Main)
+autoBtn.Size = UDim2.new(1,-20,0,40) autoBtn.Position = UDim2.new(0,10,0,88)
+autoBtn.Text = "AUTO STEAL: OFF" autoBtn.BackgroundColor3 = Color3.fromRGB(200,40,40)
+autoBtn.TextColor3 = Color3.new(1,1,1) autoBtn.Font = Enum.Font.GothamBlack autoBtn.TextSize = 14
+Instance.new("UICorner", autoBtn).CornerRadius = UDim.new(0,8)
+autoBtn.MouseButton1Click:Connect(function()
+	AutoSteal = not AutoSteal
+	autoBtn.Text = "AUTO STEAL: "..(AutoSteal and "ON" or "OFF")
+	TweenService:Create(autoBtn, TweenInfo.new(0.15), {BackgroundColor3 = AutoSteal and Color3.fromRGB(0,200,80) or Color3.fromRGB(200,40,40)}):Play()
+end)
 
-local scroll = Instance.new("ScrollingFrame",content)
-scroll.Size=UDim2.new(1,-20,1,-55); scroll.Position=UDim2.new(0,10,0,48)
-scroll.BackgroundTransparency=1; scroll.ScrollBarThickness=3
-scroll.CanvasSize=UDim2.new(0,0,0,0); scroll.AutomaticCanvasSize=Enum.AutomaticSize.Y
-Instance.new("UIListLayout",scroll).Padding=UDim.new(0,6)
+-- TWEEN TO BASE
+local baseBtn = Instance.new("TextButton", Main)
+baseBtn.Size = UDim2.new(1,-20,0,35) baseBtn.Position = UDim2.new(0,10,0,131)
+baseBtn.Text = "TWEEN TO BASE" baseBtn.BackgroundColor3 = Color3.fromRGB(0,170,255)
+baseBtn.TextColor3 = Color3.new(1,1,1) baseBtn.Font = Enum.Font.GothamBold baseBtn.TextSize = 13
+Instance.new("UICorner", baseBtn).CornerRadius = UDim.new(0,8)
+baseBtn.MouseButton1Click:Connect(function() if BasePoint then TweenTo(BasePoint) end)
 
--- FUNGSI GUI
-local function Btn(name,cb) local b=Instance.new("TextButton",scroll); b.Size=UDim2.new(1,0,0,35) b.BackgroundColor3=C.Btn b.Text=name b.TextColor3=C.Txt b.Font=Enum.Font.GothamBold b.TextSize=12 Instance.new("UICorner",b).CornerRadius=UDim.new(0,8) b.MouseButton1Click:Connect(cb) return b end
-local function Tog(name,def,cb) local b=Instance.new("TextButton",scroll); b.Size=UDim2.new(1,0,0,35) b.BackgroundColor3=C.Btn Instance.new("UICorner",b).CornerRadius=UDim.new(0,8) local l=Instance.new("TextLabel",b); l.Size=UDim2.new(1,-85,1,0) l.Position=UDim2.new(0,12,0,0) l.BackgroundTransparency=1 l.Text=name l.TextColor3=C.Txt l.Font=Enum.Font.GothamSemibold l.TextSize=12 l.TextXAlignment=Enum.TextXAlignment.Left local s=Instance.new("TextLabel",b); s.Size=UDim2.new(0,55,0,22) s.Position=UDim2.new(1,-65,0.5,-11) s.BackgroundColor3=def and C.On or C.Off s.Text=def and "ON" or "OFF" s.TextColor3=Color3.new(1,1,1) s.Font=Enum.Font.GothamBold s.TextSize=10 Instance.new("UICorner",s).CornerRadius=UDim.new(0,5) local st=def b.MouseButton1Click:Connect(function() st=not st s.Text=st and "ON" or "OFF" TS:Create(s, TweenInfo.new(0.15), {BackgroundColor3=st and C.On or C.Off}):Play() cb(st) end) end
-local function Slider(name,mn,mx,def,cb) local f=Instance.new("Frame",scroll); f.Size=UDim2.new(1,0,0,50) f.BackgroundColor3=C.Btn Instance.new("UICorner",f).CornerRadius=UDim.new(0,8) local l=Instance.new("TextLabel",f); l.Size=UDim2.new(1,-20,0,22) l.Position=UDim2.new(0,12,0,4) l.BackgroundTransparency=1 l.Text=name..": "..def l.TextColor3=C.Txt l.Font=Enum.Font.GothamSemibold l.TextSize=11 l.TextXAlignment=Enum.TextXAlignment.Left local bg=Instance.new("Frame",f); bg.Size=UDim2.new(1,-24,0,6) bg.Position=UDim2.new(0,12,0,32) bg.BackgroundColor3=C.Card Instance.new("UICorner",bg).CornerRadius=UDim.new(0,3) local fl=Instance.new("Frame",bg); fl.Size=UDim2.new((def-mn)/(mx-mn),0,1,0) fl.BackgroundColor3=Color3.fromRGB(138,138,138) Instance.new("UICorner",fl).CornerRadius=UDim.new(0,3) local drag=false local function upd(i) local r=math.clamp((i.Position.X-bg.AbsolutePosition.X)/bg.AbsoluteSize.X,0,1) local v=math.floor(mn+(mx-mn)*r) TS:Create(fl, TweenInfo.new(0.1), {Size=UDim2.new(r,0,1,0)}):Play() l.Text=name..": "..v cb(v) end bg.InputBegan:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 then drag=true upd(i) end) UIS.InputChanged:Connect(function(i) if drag and i.UserInputType==Enum.UserInputType.MouseMovement then upd(i) end) UIS.InputEnded:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 then drag=false end end) end
+-- TWEEN TO PLAYER
+local playerBtn = Instance.new("TextButton", Main)
+playerBtn.Size = UDim2.new(1,-20,0,35) playerBtn.Position = UDim2.new(0,10,0,169)
+playerBtn.Text = "TWEEN TO PLAYER" playerBtn.BackgroundColor3 = Color3.fromRGB(255,140,0)
+playerBtn.TextColor3 = Color3.new(1,1,1) playerBtn.Font = Enum.Font.GothamBold playerBtn.TextSize = 13
+Instance.new("UICorner", playerBtn).CornerRadius = UDim.new(0,8)
+playerBtn.MouseButton1Click:Connect(function()
+	if TargetPlayer and TargetPlayer.Character then
+		local hrp = TargetPlayer.Character:FindFirstChild("HumanoidRootPart")
+		if hrp then TweenTo(hrp) end
+	end
+end)
 
--- LOGIC
-local function TweenTo(pos) local hrp = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart") if not hrp then return 0 end local dist = (hrp.Position - pos.Position).Magnitude local time = math.clamp(dist / CFG.TweenSpeed, 0.05, 2.5) TS:Create(hrp, TweenInfo.new(time, Enum.EasingStyle.Linear), {CFrame = pos}):Play() return time end
-local function GetRarityValue(obj) local rarity = obj:GetAttribute("Rarity") or "Common" return RARITY_ORDER[rarity] or 1 end
-local function FindBestEgg() local hrp = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart") if not hrp then return nil end local bestEgg, bestScore = nil, 0 for _,v in pairs(WS:GetDescendants()) do if v:IsA("Model") and v.Name:lower():find("egg") then local part = v:FindFirstChildWhichIsA("BasePart", true) if part then local score = GetRarityValue(v) if score > bestScore then bestEgg = part bestScore = score end end return bestEgg end
+-- GANTI TARGET PLAYER
+local switchBtn = Instance.new("TextButton", Main)
+switchBtn.Size = UDim2.new(1,-20,0,25) switchBtn.Position = UDim2.new(0,10,0,207)
+switchBtn.Text = "Switch Target" switchBtn.BackgroundColor3 = Color3.fromRGB(50,50,60)
+switchBtn.TextColor3 = Color3.new(1,1,1) switchBtn.Font = Enum.Font.Gotham switchBtn.TextSize = 11
+Instance.new("UICorner", switchBtn).CornerRadius = UDim.new(0,6)
+local playerList = Players:GetPlayers()
+local pIndex = 1
+switchBtn.MouseButton1Click:Connect(function()
+	pIndex = pIndex % #playerList + 1
+	TargetPlayer = playerList[pIndex]
+	switchBtn.Text = "Target: "..TargetPlayer.Name
+end)
+if #playerList > 0 then TargetPlayer = playerList[1] switchBtn.Text = "Target: "..TargetPlayer.Name end
 
--- ISI GUI
-Btn("SET BASE POINT",function() local hrp = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart") if hrp then CFG.BasePoint = hrp.CFrame + Vector3.new(0,3,0) end end)
-Tog("AUTO STEAL BEST",CFG.AutoSteal,function(s) CFG.AutoSteal=s end)
-Slider("Tween Speed",200,900,CFG.TweenSpeed,function(v) CFG.TweenSpeed=v end)
-Btn("TWEEN TO BASE",function() if CFG.BasePoint then TweenTo(CFG.BasePoint) end end)
+-- CLOSE
+local closeBtn = Instance.new("TextButton", Main)
+closeBtn.Size = UDim2.new(0,22,0,22) closeBtn.Position = UDim2.new(1,-27,0,7)
+closeBtn.Text = "X" closeBtn.BackgroundColor3 = Color3.fromRGB(255,50,50)
+closeBtn.TextColor3 = Color3.new(1,1,1) closeBtn.Font = Enum.Font.GothamBold
+Instance.new("UICorner", closeBtn).CornerRadius = UDim.new(0,5)
+closeBtn.MouseButton1Click:Connect(function() gui:Destroy() end)
 
--- DROPDOWN PLAYER
-local playerNames = {}
-for _,plr in pairs(P:GetPlayers()) do table.insert(playerNames, plr.Name) end
-local playerBtn = Btn("TARGET: "..playerNames[1],function() end)
-local idx=1
-playerBtn.MouseButton1Click:Connect(function() idx=idx%#playerNames+1 playerBtn.Text="TARGET: "..playerNames[idx] CFG.TargetPlayer = P:FindFirstChild(playerNames[idx]) end)
-Btn("TWEEN TO PLAYER",function() if CFG.TargetPlayer and CFG.TargetPlayer.Character then local hrp = CFG.TargetPlayer.Character:FindFirstChild("HumanoidRootPart") if hrp then TweenTo(hrp) end)
+-- SPEED INFO
+local speedLabel = Instance.new("TextLabel", Main)
+speedLabel.Size = UDim2.new(1,-20,0,18) speedLabel.Position = UDim2.new(0,10,0,235)
+speedLabel.Text = "Speed: "..TweenSpeed.." | Scroll Mouse" speedLabel.TextColor3 = Color3.fromRGB(200,200,200)
+speedLabel.Font = Enum.Font.Gotham speedLabel.TextSize = 11 speedLabel.BackgroundTransparency = 1
+
+-- FUNCTIONS
+local function TweenTo(pos)
+	local hrp = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
+	if not hrp then return 0 end
+	local dist = (hrp.Position - pos.Position).Magnitude
+	local time = math.clamp(dist / TweenSpeed, 0.05, 2)
+	TweenService:Create(hrp, TweenInfo.new(time, Enum.EasingStyle.Linear), {CFrame = pos}):Play()
+	return time
+end
+
+local function GetRarity(obj) return RARITY_ORDER[obj:GetAttribute("Rarity") or "Common"] or 1 end
+
+local function FindBestEgg()
+	local hrp = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
+	if not hrp then return nil end
+	local best, score = nil, 0
+	for _,v in pairs(Workspace:GetDescendants()) do
+		if v:IsA("Model") and v.Name:lower():find("egg") then
+			local part = v:FindFirstChildWhichIsA("BasePart", true)
+			if part then local s = GetRarity(v) if s > score then best = part score = s end end
+		end
+	end
+	return best
+end
 
 -- LOOP
-task.spawn(function() while true do task.wait(0.1) if CFG.AutoSteal then local egg = FindBestEgg() if egg then local t1 = TweenTo(egg) task.wait(t1 + 0.1) pcall(function() if Remote then Remote:FireServer(egg) end) task.wait(0.2) if CFG.BasePoint then local t2 = TweenTo(CFG.BasePoint) task.wait(t2 + 0.2) end end end)
+task.spawn(function()
+	while true do task.wait(0.1)
+		if AutoSteal then
+			local egg = FindBestEgg()
+			if egg then
+				local t1 = TweenTo(egg) task.wait(t1 + 0.1)
+				pcall(function() if InteractRemote then InteractRemote:FireServer(egg) end end)
+				task.wait(0.2)
+				if BasePoint then local t2 = TweenTo(BasePoint) task.wait(t2 + 0.2) end
+			end
+		end
+	end
+end)
 
-print("[PRO MAX V2] GUI Loaded")
+-- GANTI SPEED
+UIS.InputChanged:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseWheel then
+		TweenSpeed = math.clamp(TweenSpeed + input.Position.Z * 50, 200, 900)
+		speedLabel.Text = "Speed: "..TweenSpeed.." | Scroll Mouse"
+	end
+end)
+
+print("[Steal Lite Old GUI] Loaded")
