@@ -1,107 +1,170 @@
--- StarterPlayerScripts > EggESP
+-- StarterPlayerScripts > StealProHub
 local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UIS = game:GetService("UserInputService")
 local LocalPlayer = Players.LocalPlayer
 
-local ESP_ON = true
+local AutoSteal = false
+local BasePoint = nil
+local TweenSpeed = 450
+local InteractRemote = ReplicatedStorage:FindFirstChild("Interact") or ReplicatedStorage:FindFirstChild("PickUp") or ReplicatedStorage:FindFirstChild("Collect")
+local TargetRarity = {} -- KOSONG = AMBIL SEMUA RARITY
 
--- WARNA PER RARITY
-local RarityColors = {
-	["Common"] = Color3.fromRGB(170, 170, 170), -- Abu
-	["Uncommon"] = Color3.fromRGB(0, 170, 0), -- Hijau
-	["Rare"] = Color3.fromRGB(0, 120, 255), -- Biru
-	["Epic"] = Color3.fromRGB(170, 0, 255), -- Ungu
-	["Legendary"] = Color3.fromRGB(255, 170, 0), -- Orange
-	["Mythic"] = Color3.fromRGB(255, 0, 170), -- Pink
-	["Cosmic"] = Color3.fromRGB(0, 255, 255), -- Cyan
-	["Secret"] = Color3.fromRGB(255, 255, 0), -- Kuning
-	["Eternal"] = Color3.fromRGB(255, 0, 0), -- Merah
-	["Divine"] = Color3.fromRGB(255, 255, 255) -- Putih/Pelangi nanti
+-- THEME KEREN
+local Theme = {
+	Main = Color3.fromRGB(10,10,15),
+	Accent = Color3.fromRGB(255, 200, 50),
+	Accent2 = Color3.fromRGB(0, 200, 255),
+	Bg = Color3.fromRGB(20,22,30),
+	Text = Color3.fromRGB(240,240,240)
 }
 
-local ESP_Objects = {}
-
-local function ClearESP(obj)
-	if ESP_Objects[obj] then
-		for _,v in pairs(ESP_Objects[obj]) do v:Destroy() end
-	ESP_Objects[obj] = nil
-	end
+-- FUNGSI TWEEN
+local function TweenTo(pos)
+	local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+	if not hrp then return 0 end
+	local dist = (hrp.Position - pos.Position).Magnitude
+	local time = math.clamp(dist / TweenSpeed, 0.05, 2.5)
+	TweenService:Create(hrp, TweenInfo.new(time, Enum.EasingStyle.Linear), {CFrame = pos}):Play()
+	return time
 end
 
-local function CreateESP(egg, rarity)
-	ClearESP(egg)
-	if not egg:FindFirstChild("HumanoidRootPart") and not egg:IsA("BasePart") then return end
-	
-	local part = egg:IsA("BasePart") and egg or egg:FindFirstChildWhichIsA("BasePart", true)
-	if not part then return end
-	
-	local color = RarityColors[rarity] or Color3.new(1,1,1)
-	
-	-- HIGHLIGHT
-	local highlight = Instance.new("Highlight")
-	highlight.Name = "EggESP"
-	highlight.FillColor = color
-	highlight.FillTransparency = 0.5
-	highlight.OutlineColor = color
-	highlight.OutlineTransparency = 0
-	highlight.Parent = egg
-	highlight.Adornee = egg
-	
-	-- BILLBOARD
-	local billboard = Instance.new("BillboardGui")
-	billboard.Name = "EggESPText"
-	billboard.Size = UDim2.new(0, 120, 0, 40)
-	billboard.StudsOffset = Vector3.new(0, 3, 0)
-	billboard.AlwaysOnTop = true
-	billboard.Parent = egg
-	
-	local label = Instance.new("TextLabel", billboard)
-	label.Size = UDim2.new(1,0,1,0)
-	label.BackgroundTransparency = 1
-	label.TextScaled = true
-	label.Font = Enum.Font.GothamBold
-	label.TextStrokeTransparency = 0
-	label.TextStrokeColor3 = Color3.new(0,0,0)
-	label.TextColor3 = color
-	label.Text = rarity.."\nEgg"
-	
-	ESP_Objects[egg] = {highlight, billboard}
+-- INSTANT STEAL
+local function StealEgg(egg)
+	if InteractRemote then InteractRemote:FireServer(egg) end
 end
 
--- CARI EGG DI WORKSPACE
-local function ScanEggs()
+-- CARI EGG
+local function FindBestEgg()
+	local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+	if not hrp then return nil end
+	
+	local closest, dist = nil, math.huge
 	for _,v in pairs(workspace:GetDescendants()) do
-		if v.Name:lower():find("egg") and v:IsA("Model") or v:IsA("BasePart") then
-			if not ESP_Objects[v] then
-				-- Coba cari rarity di Attribute / StringValue
-				local rarity = "Common"
-				if v:GetAttribute("Rarity") then
-					rarity = v:GetAttribute("Rarity")
-				elseif v:FindFirstChild("Rarity") then
-					rarity = v.Rarity.Value
-				end
-				if ESP_ON then CreateESP(v, rarity) end
+		if (v.Name:lower():find("egg") and (v:IsA("Model") or v:IsA("BasePart"))) then
+			local part = v:IsA("BasePart") and v or v:FindFirstChildWhichIsA("BasePart", true)
+			if part then
+				local d = (hrp.Position - part.Position).Magnitude
+				if d < dist then closest = part dist = d end
 			end
 		end
 	end
+	return closest
 end
 
 -- LOOP
-RunService.Heartbeat:Connect(function()
-	if ESP_ON then
-		ScanEggs()
-	else
-		for obj,_ in pairs(ESP_Objects) do ClearESP(obj) end
+task.spawn(function()
+	while true do task.wait(0.05)
+		if AutoSteal then
+			local egg = FindBestEgg()
+			if egg then
+				local t1 = TweenTo(egg) task.wait(t1 + 0.05)
+				StealEgg(egg) task.wait(0.1)
+				if BasePoint then local t2 = TweenTo(BasePoint) task.wait(t2 + 0.1) end
+			end
+		end
 	end
 end)
 
--- TOGGLE KEY: F
-game:GetService("UserInputService").InputBegan:Connect(function(input, gp)
-	if gp then return end
-	if input.KeyCode == Enum.KeyCode.F then
-	ESP_ON = not ESP_ON
-		print("Egg ESP:", ESP_ON and "ON" or "OFF")
+-- GUI KEREN
+local gui = Instance.new("ScreenGui", LocalPlayer.PlayerGui)
+gui.Name = "StealProHub"
+gui.ResetOnSpawn = false
+
+local Main = Instance.new("Frame", gui)
+Main.Size = UDim2.new(0, 280, 0, 220)
+Main.Position = UDim2.new(0, 30, 0, 30)
+Main.BackgroundColor3 = Theme.Main
+Main.BorderSizePixel = 0
+Main.Active = true
+Main.Draggable = true
+Instance.new("UICorner", Main).CornerRadius = UDim.new(0,15)
+local stroke = Instance.new("UIStroke", Main)
+stroke.Color = Theme.Accent
+stroke.Thickness = 2
+
+-- GLOW EFFECT
+task.spawn(function()
+	while true do
+		TweenService:Create(stroke, TweenInfo.new(2, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {Color = Theme.Accent}):Play()
+		task.wait(2)
+		TweenService:Create(stroke, TweenInfo.new(2, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {Color = Theme.Accent2}):Play()
+		task.wait(2)
 	end
 end)
 
-print("[Egg ESP] Loaded. Press F to Toggle")
+local Title = Instance.new("TextLabel", Main)
+Title.Size = UDim2.new(1,0,0,40)
+Title.Text = "STEAL PRO HUB"
+Title.TextColor3 = Theme.Accent
+Title.Font = Enum.Font.GothamBlack
+Title.TextSize = 18
+Title.BackgroundTransparency = 1
+
+-- SET BASE
+local setBtn = Instance.new("TextButton", Main)
+setBtn.Size = UDim2.new(1,-20,0,45)
+setBtn.Position = UDim2.new(0,10,0,50)
+setBtn.Text = "SET BASE POINT"
+setBtn.BackgroundColor3 = Theme.Bg
+setBtn.TextColor3 = Theme.Text
+setBtn.Font = Enum.Font.GothamBold
+setBtn.TextSize = 14
+Instance.new("UICorner", setBtn).CornerRadius = UDim.new(0,10)
+Instance.new("UIStroke", setBtn).Color = Theme.Accent2
+
+setBtn.MouseButton1Click:Connect(function()
+	local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+	if hrp then BasePoint = hrp.CFrame + Vector3.new(0,3,0)
+	setBtn.Text = "✓ BASE SAVED"
+	task.wait(1) setBtn.Text = "SET BASE POINT" end
+end)
+
+-- AUTO STEAL
+local autoBtn = Instance.new("TextButton", Main)
+autoBtn.Size = UDim2.new(1,-20,0,45)
+autoBtn.Position = UDim2.new(0,10,0,100)
+autoBtn.Text = "AUTO STEAL: OFF"
+autoBtn.BackgroundColor3 = Color3.fromRGB(200,50,50)
+autoBtn.TextColor3 = Color3.new(1,1,1)
+autoBtn.Font = Enum.Font.GothamBlack
+autoBtn.TextSize = 14
+Instance.new("UICorner", autoBtn).CornerRadius = UDim.new(0,10)
+
+autoBtn.MouseButton1Click:Connect(function()
+	AutoSteal = not AutoSteal
+	autoBtn.Text = "AUTO STEAL: "..(AutoSteal and "ON" or "OFF")
+	TweenService:Create(autoBtn, TweenInfo.new(0.2), {BackgroundColor3 = AutoSteal and Color3.fromRGB(0,200,0) or Color3.fromRGB(200,50,50)}):Play()
+end)
+
+-- SPEED
+local speedLabel = Instance.new("TextLabel", Main)
+speedLabel.Size = UDim2.new(1,-20,0,20)
+speedLabel.Position = UDim2.new(0,10,0,150)
+speedLabel.Text = "Tween Speed: "..TweenSpeed.." | Scroll Mouse"
+speedLabel.TextColor3 = Theme.Text
+speedLabel.Font = Enum.Font.Gotham
+speedLabel.TextSize = 12
+speedLabel.BackgroundTransparency = 1
+
+UIS.InputChanged:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseWheel then
+		TweenSpeed = math.clamp(TweenSpeed + input.Position.Z * 50, 150, 900)
+		speedLabel.Text = "Tween Speed: "..TweenSpeed.." | Scroll Mouse"
+	end
+end)
+
+-- CLOSE BTN
+local closeBtn = Instance.new("TextButton", Main)
+closeBtn.Size = UDim2.new(0,25,0,25)
+closeBtn.Position = UDim2.new(1,-30,0,7)
+closeBtn.Text = "X"
+closeBtn.BackgroundColor3 = Color3.fromRGB(255,60,60)
+closeBtn.TextColor3 = Color3.new(1,1,1)
+closeBtn.Font = Enum.Font.GothamBold
+Instance.new("UICorner", closeBtn).CornerRadius = UDim.new(0,6)
+closeBtn.MouseButton1Click:Connect(function() Main.Visible = false end)
+
+print("[Steal Pro Hub] Loaded - Ambil Semua Rarity")
