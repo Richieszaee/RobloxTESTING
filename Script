@@ -1,0 +1,131 @@
+-- StarterPlayerScripts > WarpGUI_SingleScript
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local LocalPlayer = Players.LocalPlayer
+
+local TWEEN_SPEED = 200 -- stud/detik
+local PointA, PointB = nil, nil
+
+-- BIKIN REMOTE
+local Remote = ReplicatedStorage:FindFirstChild("WarpRemote")
+if not Remote then
+	Remote = Instance.new("RemoteEvent")
+	Remote.Name = "WarpRemote"
+	Remote.Parent = ReplicatedStorage
+end
+
+-- GUI
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "WarpGUI"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+local Main = Instance.new("Frame")
+Main.Size = UDim2.new(0, 200, 0, 180)
+Main.Position = UDim2.new(0, 20, 0.5, -90)
+Main.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+Main.BorderSizePixel = 0
+Main.Active = true
+Main.Draggable = true
+Main.Parent = ScreenGui
+Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 8)
+
+local Title = Instance.new("TextLabel", Main)
+Title.Size = UDim2.new(1, 0, 0, 30)
+Title.Text = "WARP SYSTEM"
+Title.TextColor3 = Color3.fromRGB(0, 170, 255)
+Title.Font = Enum.Font.GothamBold
+Title.TextSize = 14
+Title.BackgroundTransparency = 1
+
+local function createBtn(name, posY, color)
+	local btn = Instance.new("TextButton", Main)
+	btn.Size = UDim2.new(1, -20, 0, 35)
+	btn.Position = UDim2.new(0, 10, 0, posY)
+	btn.Text = name
+	btn.TextColor3 = Color3.new(1,1,1)
+	btn.Font = Enum.Font.GothamBold
+	btn.TextSize = 12
+	btn.BackgroundColor3 = color
+	Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
+	return btn
+end
+
+local BtnSetA = createBtn("SET POINT A", 40, Color3.fromRGB(0, 170, 255))
+local BtnSetB = createBtn("SET POINT B", 80, Color3.fromRGB(85, 255, 0))
+local BtnWarp = createBtn("WARP A <-> B", 120, Color3.fromRGB(255, 85, 0))
+local Status = Instance.new("TextLabel", Main)
+Status.Size = UDim2.new(1, -20, 0, 20)
+Status.Position = UDim2.new(0, 10, 0, 155)
+Status.Text = "Status: Belum set"
+Status.TextColor3 = Color3.new(0.8,0.8,0.8)
+Status.Font = Enum.Font.Gotham
+Status.TextSize = 10
+Status.BackgroundTransparency = 1
+
+-- TOMBOL MINIMIZE
+local MiniBtn = Instance.new("TextButton", ScreenGui)
+MiniBtn.Size = UDim2.new(0, 100, 0, 30)
+MiniBtn.Position = UDim2.new(0, 20, 0, 20)
+MiniBtn.Text = "OPEN WARP"
+MiniBtn.Visible = false
+MiniBtn.BackgroundColor3 = Color3.fromRGB(20,20,25)
+MiniBtn.TextColor3 = Color3.new(1,1,1)
+Instance.new("UICorner", MiniBtn).CornerRadius = UDim.new(0,6)
+
+-- LOGIC CLIENT
+BtnSetA.MouseButton1Click:Connect(function()
+	local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+	if hrp then
+		PointA = hrp.CFrame + Vector3.new(0,3,0)
+		Status.Text = "Status: Point A Diset"
+	end
+end)
+
+BtnSetB.MouseButton1Click:Connect(function()
+	local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+	if hrp then
+		PointB = hrp.CFrame + Vector3.new(0,3,0)
+		Status.Text = "Status: Point B Diset"
+	end
+end)
+
+local goingToA = true
+BtnWarp.MouseButton1Click:Connect(function()
+	local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+	if not hrp then return end
+	
+	local target = goingToA and PointA or PointB
+	if target then
+		local dist = (hrp.Position - target.Position).Magnitude
+		local time = math.clamp(dist / TWEEN_SPEED, 0.1, 10)
+		local tween = TweenService:Create(hrp, TweenInfo.new(time, Enum.EasingStyle.Linear), {CFrame = target})
+		tween:Play()
+		Status.Text = goingToA and "Status: Warp ke A" or "Status: Warp ke B"
+	goingToA = not goingToA
+	else
+		Status.Text = "Status: Set A & B dulu"
+	end
+end)
+
+-- MINIMIZE
+local closeBtn = Instance.new("TextButton", Main)
+closeBtn.Size = UDim2.new(0, 20, 0, 20)
+closeBtn.Position = UDim2.new(1, -25, 0, 5)
+closeBtn.Text = "X"
+closeBtn.BackgroundColor3 = Color3.fromRGB(255, 50, 50)
+closeBtn.TextColor3 = Color3.new(1,1,1)
+Instance.new("UICorner", closeBtn).CornerRadius = UDim.new(0,4)
+
+closeBtn.MouseButton1Click:Connect(function()
+	Main.Visible = false
+	MiniBtn.Visible = true
+end)
+
+MiniBtn.MouseButton1Click:Connect(function()
+	Main.Visible = true
+	MiniBtn.Visible = false
+end)
+
+print("[WarpGUI] Loaded. GUI muncul di kiri layar")
