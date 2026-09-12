@@ -1,252 +1,107 @@
--- StarterPlayerScripts > OMEGA_HUB_GUI
+-- StarterPlayerScripts > EggESP
 local Players = game:GetService("Players")
-local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
-local UIS = game:GetService("UserInputService")
 local LocalPlayer = Players.LocalPlayer
 
-local Speed = 200
-local FlySpeed = 50
-local JumpPower = 50
-local Points = {}
-local MAX_SLOTS = 5
-local CurrentSlot = 1
-local Flying = false
-local Noclip = false
-local FlyBodyVel, FlyBodyGyro
+local ESP_ON = true
 
--- THEME
-local Theme = {
-	Main = Color3.fromRGB(15,16,22),
-	Accent = Color3.fromRGB(0, 200, 255),
-	Item = Color3.fromRGB(28,30,40),
-	Text = Color3.fromRGB(255,255,255)
+-- WARNA PER RARITY
+local RarityColors = {
+	["Common"] = Color3.fromRGB(170, 170, 170), -- Abu
+	["Uncommon"] = Color3.fromRGB(0, 170, 0), -- Hijau
+	["Rare"] = Color3.fromRGB(0, 120, 255), -- Biru
+	["Epic"] = Color3.fromRGB(170, 0, 255), -- Ungu
+	["Legendary"] = Color3.fromRGB(255, 170, 0), -- Orange
+	["Mythic"] = Color3.fromRGB(255, 0, 170), -- Pink
+	["Cosmic"] = Color3.fromRGB(0, 255, 255), -- Cyan
+	["Secret"] = Color3.fromRGB(255, 255, 0), -- Kuning
+	["Eternal"] = Color3.fromRGB(255, 0, 0), -- Merah
+	["Divine"] = Color3.fromRGB(255, 255, 255) -- Putih/Pelangi nanti
 }
 
--- GUI
-local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "OmegaHub"
-ScreenGui.ResetOnSpawn = false
-ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+local ESP_Objects = {}
 
-local Main = Instance.new("Frame", ScreenGui)
-Main.Size = UDim2.new(0, 500, 0, 350)
-Main.Position = UDim2.new(0.5, -250, 0.5, -175)
-Main.BackgroundColor3 = Theme.Main
-Main.BorderSizePixel = 0
-Main.Active = true
-Main.Draggable = true
-Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 10)
-Instance.new("UIStroke", Main).Color = Color3.fromRGB(45,48,60)
-
--- SIDEBAR
-local Sidebar = Instance.new("Frame", Main)
-Sidebar.Size = UDim2.new(0, 140, 1, 0)
-Sidebar.BackgroundColor3 = Theme.Item
-Instance.new("UICorner", Sidebar).CornerRadius = UDim.new(0, 10)
-
-local Title = Instance.new("TextLabel", Sidebar)
-Title.Size = UDim2.new(1,0,0,40)
-Title.Position = UDim2.new(0,0,0,10)
-Title.Text = "OMEGA HUB"
-Title.TextColor3 = Theme.Accent
-Title.Font = Enum.Font.GothamBold
-Title.TextSize = 14
-Title.BackgroundTransparency = 1
-
-local Pages = {}
-local function createPage(name)
-	local p = Instance.new("ScrollingFrame", Main)
-	p.Size = UDim2.new(1, -150, 1, -20)
-	p.Position = UDim2.new(0, 145, 0, 10)
-	p.BackgroundTransparency = 1
-	p.ScrollBarThickness = 2
-	p.Visible = false
-	p.AutomaticCanvasSize = Enum.AutomaticSize.Y
-	Instance.new("UIListLayout", p).Padding = UDim.new(0,8)
-	Pages[name] = p
-	return p
+local function ClearESP(obj)
+	if ESP_Objects[obj] then
+		for _,v in pairs(ESP_Objects[obj]) do v:Destroy() end
+	ESP_Objects[obj] = nil
+	end
 end
 
-local WarpPage = createPage("Warp")
-local PlayerPage = createPage("Player")
-WarpPage.Visible = true
-
-local function createNavBtn(text, page)
-	local btn = Instance.new("TextButton", Sidebar)
-	btn.Size = UDim2.new(1, -20, 0, 35)
-	btn.Position = UDim2.new(0,10,0,60 + (#Sidebar:GetChildren()-3)*40)
-	btn.Text = " "..text
-	btn.TextXAlignment = Enum.TextXAlignment.Left
-	btn.TextColor3 = Color3.new(0.7,0.7,0.7)
-	btn.Font = Enum.Font.GothamBold
-	btn.TextSize = 12
-	btn.BackgroundColor3 = Theme.Main
-	Instance.new("UICorner", btn).CornerRadius = UDim.new(0,6)
-	btn.MouseButton1Click:Connect(function()
-		for _,v in pairs(Pages) do v.Visible = false end
-		page.Visible = true
-		for _,b in pairs(Sidebar:GetChildren()) do if b:IsA("TextButton") then b.BackgroundColor3 = Theme.Main end end
-		btn.BackgroundColor3 = Theme.Accent
-	end)
-end
-
-createNavBtn("Warp", WarpPage)
-createNavBtn("Player", PlayerPage)
-
--- UTILS
-local function createToggle(parent, text, callback)
-	local f = Instance.new("Frame", parent)
-	f.Size = UDim2.new(1,-10,0,35)
-	f.BackgroundTransparency = 1
-	local btn = Instance.new("TextButton", f)
-	btn.Size = UDim2.new(0,18,0,18)
-	btn.Position = UDim2.new(0,5,0.5,-9)
-	btn.BackgroundColor3 = Theme.Item
-	Instance.new("UICorner", btn).CornerRadius = UDim.new(0,4)
-	local indicator = Instance.new("Frame", btn)
-	indicator.Size = UDim2.new(0.6,0,0.6,0)
-	indicator.Position = UDim2.new(0.2,0,0.2,0)
-	indicator.BackgroundColor3 = Theme.Accent
-	indicator.Visible = false
-	Instance.new("UICorner", indicator).CornerRadius = UDim.new(0,2)
-	local label = Instance.new("TextLabel", f)
-	label.Size = UDim2.new(1,-30,1,0)
-	label.Position = UDim2.new(0,30,0,0)
-	label.Text = text
-	label.TextColor3 = Theme.Text
-	label.Font = Enum.Font.GothamMedium
-	label.TextSize = 12
-	label.BackgroundTransparency = 1
-	label.TextXAlignment = Enum.TextXAlignment.Left
-	local state = false
-	btn.MouseButton1Click:Connect(function()
-		state = not state
-		indicator.Visible = state
-		callback(state)
-	end)
-end
-
-local function createSlider(parent, text, min, max, default, callback)
-	local f = Instance.new("Frame", parent)
-	f.Size = UDim2.new(1,-10,0,45)
-	f.BackgroundTransparency = 1
-	local label = Instance.new("TextLabel", f)
-	label.Size = UDim2.new(1,0,0,20)
-	label.Text = text..": "..default
-	label.TextColor3 = Theme.Text
-	label.Font = Enum.Font.Gotham
-	label.TextSize = 12
-	label.BackgroundTransparency = 1
-	label.TextXAlignment = Enum.TextXAlignment.Left
-	local bar = Instance.new("TextButton", f)
-	bar.Size = UDim2.new(1,0,0,6)
-	bar.Position = UDim2.new(0,0,0,25)
-	bar.BackgroundColor3 = Theme.Item
-	bar.Text = ""
-	Instance.new("UICorner", bar).CornerRadius = UDim.new(0,3)
-	local fill = Instance.new("Frame", bar)
-	fill.Size = UDim2.new((default-min)/(max-min),0,1,0)
-	fill.BackgroundColor3 = Theme.Accent
-	Instance.new("UICorner", fill).CornerRadius = UDim.new(0,3)
+local function CreateESP(egg, rarity)
+	ClearESP(egg)
+	if not egg:FindFirstChild("HumanoidRootPart") and not egg:IsA("BasePart") then return end
 	
-	local dragging = false
-	bar.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then dragging = true end end)
-	UIS.InputEnded:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end end)
-	UIS.InputChanged:Connect(function(i)
-		if dragging and i.UserInputType == Enum.UserInputType.MouseMovement then
-			local x = math.clamp((i.Position.X - bar.AbsolutePosition.X)/bar.AbsoluteSize.X,0,1)
-			fill.Size = UDim2.new(x,0,1,0)
-			local val = math.floor(min + x*(max-min))
-			label.Text = text..": "..val
-			callback(val)
-		end
-	end)
+	local part = egg:IsA("BasePart") and egg or egg:FindFirstChildWhichIsA("BasePart", true)
+	if not part then return end
+	
+	local color = RarityColors[rarity] or Color3.new(1,1,1)
+	
+	-- HIGHLIGHT
+	local highlight = Instance.new("Highlight")
+	highlight.Name = "EggESP"
+	highlight.FillColor = color
+	highlight.FillTransparency = 0.5
+	highlight.OutlineColor = color
+	highlight.OutlineTransparency = 0
+	highlight.Parent = egg
+	highlight.Adornee = egg
+	
+	-- BILLBOARD
+	local billboard = Instance.new("BillboardGui")
+	billboard.Name = "EggESPText"
+	billboard.Size = UDim2.new(0, 120, 0, 40)
+	billboard.StudsOffset = Vector3.new(0, 3, 0)
+	billboard.AlwaysOnTop = true
+	billboard.Parent = egg
+	
+	local label = Instance.new("TextLabel", billboard)
+	label.Size = UDim2.new(1,0,1,0)
+	label.BackgroundTransparency = 1
+	label.TextScaled = true
+	label.Font = Enum.Font.GothamBold
+	label.TextStrokeTransparency = 0
+	label.TextStrokeColor3 = Color3.new(0,0,0)
+	label.TextColor3 = color
+	label.Text = rarity.."\nEgg"
+	
+	ESP_Objects[egg] = {highlight, billboard}
 end
 
--- [[ PAGE WARP ]]
-createSlider(WarpPage, "Tween Speed", 50, 500, Speed, function(v) Speed = v end)
-for i=1,MAX_SLOTS do
-	local f = Instance.new("Frame", WarpPage)
-	f.Size = UDim2.new(1,-10,0,35)
-	f.BackgroundColor3 = Theme.Item
-	Instance.new("UICorner", f).CornerRadius = UDim.new(0,6)
-	local set = Instance.new("TextButton", f)
-	set.Size = UDim2.new(0,50,1,0)
-	set.Text = "SET"
-	set.BackgroundColor3 = Theme.Accent
-	set.TextColor3 = Color3.new(0,0,0)
-	set.Font = Enum.Font.GothamBold
-	set.TextSize = 12
-	Instance.new("UICorner", set).CornerRadius = UDim.new(0,6)
-	local warp = Instance.new("TextButton", f)
-	warp.Size = UDim2.new(1,-60,1,0)
-	warp.Position = UDim2.new(0,55,0,0)
-	warp.Text = "Slot "..i.." : Kosong"
-	warp.BackgroundTransparency = 1
-	warp.TextColor3 = Theme.Text
-	warp.Font = Enum.Font.Gotham
-	warp.TextSize = 12
-	warp.TextXAlignment = Enum.TextXAlignment.Left
-	
-	set.MouseButton1Click:Connect(function()
-		local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-		if hrp then Points[i] = hrp.CFrame + Vector3.new(0,3,0); warp.Text = "Slot "..i.." : Saved" end
-	end)
-	warp.MouseButton1Click:Connect(function()
-		if Points[i] then
-			CurrentSlot = i
-			local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-			if hrp then
-				local dist = (hrp.Position - Points[i].Position).Magnitude
-				local time = math.clamp(dist/Speed,0.1,10)
-				TweenService:Create(hrp,TweenInfo.new(time,Enum.EasingStyle.Linear),{CFrame=Points[i]}):Play()
+-- CARI EGG DI WORKSPACE
+local function ScanEggs()
+	for _,v in pairs(workspace:GetDescendants()) do
+		if v.Name:lower():find("egg") and v:IsA("Model") or v:IsA("BasePart") then
+			if not ESP_Objects[v] then
+				-- Coba cari rarity di Attribute / StringValue
+				local rarity = "Common"
+				if v:GetAttribute("Rarity") then
+					rarity = v:GetAttribute("Rarity")
+				elseif v:FindFirstChild("Rarity") then
+					rarity = v.Rarity.Value
+				end
+				if ESP_ON then CreateESP(v, rarity) end
 			end
 		end
-	end)
+	end
 end
 
--- [[ PAGE PLAYER ]]
-createToggle(PlayerPage, "Fly", function(state)
-	Flying = state
-	local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-	if state then
-		FlyBodyVel = Instance.new("BodyVelocity", hrp)
-		FlyBodyVel.MaxForce = Vector3.new(400000,400000,400000)
-		FlyBodyGyro = Instance.new("BodyGyro", hrp)
-		FlyBodyGyro.MaxTorque = Vector3.new(400000,400000,400000)
+-- LOOP
+RunService.Heartbeat:Connect(function()
+	if ESP_ON then
+		ScanEggs()
 	else
-		if FlyBodyVel then FlyBodyVel:Destroy() end
-		if FlyBodyGyro then FlyBodyGyro:Destroy() end
+		for obj,_ in pairs(ESP_Objects) do ClearESP(obj) end
 	end
 end)
 
-createToggle(PlayerPage, "Noclip", function(state)
-	Noclip = state
-end)
-
-createSlider(PlayerPage, "WalkSpeed", 16, 200, 16, function(v)
-	LocalPlayer.Character.Humanoid.WalkSpeed = v
-end)
-
-createSlider(PlayerPage, "JumpPower", 50, 200, 50, function(v)
-	LocalPlayer.Character.Humanoid.JumpPower = v
-end)
-
--- FLY + NOCLIP LOOP
-RunService.RenderStepped:Connect(function()
-	if Flying then
-		local cam = workspace.CurrentCamera
-		local move = UIS:GetMovementKeys()
-		local dir = Vector3.new(move.X,0,move.Y)
-		FlyBodyVel.Velocity = cam.CFrame:VectorToWorldSpace(dir) * FlySpeed
-		FlyBodyGyro.CFrame = cam.CFrame
-	end
-	if Noclip and LocalPlayer.Character then
-		for _,v in pairs(LocalPlayer.Character:GetDescendants()) do
-			if v:IsA("BasePart") then v.CanCollide = false end
-		end
+-- TOGGLE KEY: F
+game:GetService("UserInputService").InputBegan:Connect(function(input, gp)
+	if gp then return end
+	if input.KeyCode == Enum.KeyCode.F then
+	ESP_ON = not ESP_ON
+		print("Egg ESP:", ESP_ON and "ON" or "OFF")
 	end
 end)
 
-print("[Omega Hub] Loaded")
+print("[Egg ESP] Loaded. Press F to Toggle")
