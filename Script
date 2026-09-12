@@ -1,131 +1,156 @@
--- StarterPlayerScripts > WarpGUI_SingleScript
+-- StarterPlayerScripts > MultiSlotWarpGUI
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local LocalPlayer = Players.LocalPlayer
 
-local TWEEN_SPEED = 200 -- stud/detik
-local PointA, PointB = nil, nil
-
--- BIKIN REMOTE
-local Remote = ReplicatedStorage:FindFirstChild("WarpRemote")
-if not Remote then
-	Remote = Instance.new("RemoteEvent")
-	Remote.Name = "WarpRemote"
-	Remote.Parent = ReplicatedStorage
-end
+local MAX_SLOTS = 5
+local Speed = 200 -- default stud/detik
+local Points = {} -- Points[1] = CFrame, dst
+local CurrentSlot = 1
 
 -- GUI
 local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "WarpGUI"
+ScreenGui.Name = "SlotWarpGUI"
 ScreenGui.ResetOnSpawn = false
 ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
 
 local Main = Instance.new("Frame")
-Main.Size = UDim2.new(0, 200, 0, 180)
-Main.Position = UDim2.new(0, 20, 0.5, -90)
-Main.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+Main.Size = UDim2.new(0, 240, 0, 320)
+Main.Position = UDim2.new(0, 20, 0.5, -160)
+Main.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
 Main.BorderSizePixel = 0
 Main.Active = true
 Main.Draggable = true
 Main.Parent = ScreenGui
-Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 8)
+Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 10)
 
 local Title = Instance.new("TextLabel", Main)
 Title.Size = UDim2.new(1, 0, 0, 30)
-Title.Text = "WARP SYSTEM"
-Title.TextColor3 = Color3.fromRGB(0, 170, 255)
+Title.Text = "SLOT WARP SYSTEM"
+Title.TextColor3 = Color3.fromRGB(0, 200, 255)
 Title.Font = Enum.Font.GothamBold
 Title.TextSize = 14
 Title.BackgroundTransparency = 1
 
-local function createBtn(name, posY, color)
-	local btn = Instance.new("TextButton", Main)
-	btn.Size = UDim2.new(1, -20, 0, 35)
-	btn.Position = UDim2.new(0, 10, 0, posY)
-	btn.Text = name
+-- SPEED SLIDER
+local SpeedLabel = Instance.new("TextLabel", Main)
+SpeedLabel.Size = UDim2.new(1, -20, 0, 20)
+SpeedLabel.Position = UDim2.new(0, 10, 0, 35)
+SpeedLabel.Text = "Speed: "..Speed
+SpeedLabel.TextColor3 = Color3.new(1,1,1)
+SpeedLabel.Font = Enum.Font.Gotham
+SpeedLabel.TextSize = 12
+SpeedLabel.BackgroundTransparency = 1
+SpeedLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+local SpeedSlider = Instance.new("TextButton", Main)
+SpeedSlider.Size = UDim2.new(1, -20, 0, 8)
+SpeedSlider.Position = UDim2.new(0, 10, 0, 55)
+SpeedSlider.BackgroundColor3 = Color3.fromRGB(40,40,50)
+SpeedSlider.Text = ""
+Instance.new("UICorner", SpeedSlider).CornerRadius = UDim.new(0,4)
+
+local SliderFill = Instance.new("Frame", SpeedSlider)
+SliderFill.Size = UDim2.new(0.5, 0, 1, 0)
+SliderFill.BackgroundColor3 = Color3.fromRGB(0, 200, 255)
+Instance.new("UICorner", SliderFill).CornerRadius = UDim.new(0,4)
+
+-- SLOT BUTTONS
+local SlotFrame = Instance.new("Frame", Main)
+SlotFrame.Size = UDim2.new(1, -20, 0, 160)
+SlotFrame.Position = UDim2.new(0, 10, 0, 75)
+SlotFrame.BackgroundTransparency = 1
+local UIList = Instance.new("UIListLayout", SlotFrame)
+UIList.Padding = UDim.new(0,5)
+
+local SlotBtns = {}
+for i = 1, MAX_SLOTS do
+	local btn = Instance.new("TextButton", SlotFrame)
+	btn.Size = UDim2.new(1, 0, 0, 30)
+	btn.Text = "Slot "..i.." : Kosong"
 	btn.TextColor3 = Color3.new(1,1,1)
-	btn.Font = Enum.Font.GothamBold
+	btn.Font = Enum.Font.GothamMedium
 	btn.TextSize = 12
-	btn.BackgroundColor3 = color
-	Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
-	return btn
+	btn.BackgroundColor3 = Color3.fromRGB(30,30,40)
+	btn.TextXAlignment = Enum.TextXAlignment.Left
+	Instance.new("UICorner", btn).CornerRadius = UDim.new(0,6)
+	
+	local setBtn = Instance.new("TextButton", btn)
+	setBtn.Size = UDim2.new(0, 50, 1, 0)
+	setBtn.Position = UDim2.new(1, -50, 0, 0)
+	setBtn.Text = "SET"
+	setBtn.BackgroundColor3 = Color3.fromRGB(0, 170, 255)
+	
+	setBtn.MouseButton1Click:Connect(function()
+		local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+		if hrp then
+			Points[i] = hrp.CFrame + Vector3.new(0,3,0)
+			btn.Text = "Slot "..i.." : Saved"
+		end
+	end)
+	
+	btn.MouseButton1Click:Connect(function()
+		if Points[i] then
+			CurrentSlot = i
+			for k,v in pairs(SlotBtns) do v.BackgroundColor3 = Color3.fromRGB(30,30,40) end
+			btn.BackgroundColor3 = Color3.fromRGB(0, 200, 255)
+		end
+	end)
+	
+	SlotBtns[i] = btn
 end
 
-local BtnSetA = createBtn("SET POINT A", 40, Color3.fromRGB(0, 170, 255))
-local BtnSetB = createBtn("SET POINT B", 80, Color3.fromRGB(85, 255, 0))
-local BtnWarp = createBtn("WARP A <-> B", 120, Color3.fromRGB(255, 85, 0))
+-- WARP BUTTON
+local WarpBtn = Instance.new("TextButton", Main)
+WarpBtn.Size = UDim2.new(1, -20, 0, 35)
+WarpBtn.Position = UDim2.new(0, 10, 0, 245)
+WarpBtn.Text = "WARP TO SELECTED SLOT"
+WarpBtn.TextColor3 = Color3.new(1,1,1)
+WarpBtn.Font = Enum.Font.GothamBold
+WarpBtn.TextSize = 12
+WarpBtn.BackgroundColor3 = Color3.fromRGB(255, 85, 0)
+Instance.new("UICorner", WarpBtn).CornerRadius = UDim.new(0,6)
+
+-- STATUS
 local Status = Instance.new("TextLabel", Main)
 Status.Size = UDim2.new(1, -20, 0, 20)
-Status.Position = UDim2.new(0, 10, 0, 155)
-Status.Text = "Status: Belum set"
+Status.Position = UDim2.new(0, 10, 0, 285)
+Status.Text = "Pilih slot dulu"
 Status.TextColor3 = Color3.new(0.8,0.8,0.8)
 Status.Font = Enum.Font.Gotham
 Status.TextSize = 10
 Status.BackgroundTransparency = 1
 
--- TOMBOL MINIMIZE
-local MiniBtn = Instance.new("TextButton", ScreenGui)
-MiniBtn.Size = UDim2.new(0, 100, 0, 30)
-MiniBtn.Position = UDim2.new(0, 20, 0, 20)
-MiniBtn.Text = "OPEN WARP"
-MiniBtn.Visible = false
-MiniBtn.BackgroundColor3 = Color3.fromRGB(20,20,25)
-MiniBtn.TextColor3 = Color3.new(1,1,1)
-Instance.new("UICorner", MiniBtn).CornerRadius = UDim.new(0,6)
-
--- LOGIC CLIENT
-BtnSetA.MouseButton1Click:Connect(function()
-	local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-	if hrp then
-		PointA = hrp.CFrame + Vector3.new(0,3,0)
-		Status.Text = "Status: Point A Diset"
+-- SPEED SLIDER LOGIC
+local dragging = false
+SpeedSlider.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = true end
+end)
+SpeedSlider.InputEnded:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end
+end)
+game:GetService("UserInputService").InputChanged:Connect(function(input)
+	if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+		local x = math.clamp((input.Position.X - SpeedSlider.AbsolutePosition.X) / SpeedSlider.AbsoluteSize.X, 0, 1)
+		SliderFill.Size = UDim2.new(x, 0, 1, 0)
+		Speed = math.floor(50 + x * 450) -- 50 sampai 500
+		SpeedLabel.Text = "Speed: "..Speed
 	end
 end)
 
-BtnSetB.MouseButton1Click:Connect(function()
+-- WARP LOGIC
+WarpBtn.MouseButton1Click:Connect(function()
 	local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-	if hrp then
-		PointB = hrp.CFrame + Vector3.new(0,3,0)
-		Status.Text = "Status: Point B Diset"
-	end
-end)
-
-local goingToA = true
-BtnWarp.MouseButton1Click:Connect(function()
-	local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-	if not hrp then return end
-	
-	local target = goingToA and PointA or PointB
-	if target then
+	local target = Points[CurrentSlot]
+	if hrp and target then
 		local dist = (hrp.Position - target.Position).Magnitude
-		local time = math.clamp(dist / TWEEN_SPEED, 0.1, 10)
+		local time = math.clamp(dist / Speed, 0.1, 10)
 		local tween = TweenService:Create(hrp, TweenInfo.new(time, Enum.EasingStyle.Linear), {CFrame = target})
 		tween:Play()
-		Status.Text = goingToA and "Status: Warp ke A" or "Status: Warp ke B"
-	goingToA = not goingToA
+		Status.Text = "Warping ke Slot "..CurrentSlot
 	else
-		Status.Text = "Status: Set A & B dulu"
+		Status.Text = "Slot belum diset"
 	end
 end)
 
--- MINIMIZE
-local closeBtn = Instance.new("TextButton", Main)
-closeBtn.Size = UDim2.new(0, 20, 0, 20)
-closeBtn.Position = UDim2.new(1, -25, 0, 5)
-closeBtn.Text = "X"
-closeBtn.BackgroundColor3 = Color3.fromRGB(255, 50, 50)
-closeBtn.TextColor3 = Color3.new(1,1,1)
-Instance.new("UICorner", closeBtn).CornerRadius = UDim.new(0,4)
-
-closeBtn.MouseButton1Click:Connect(function()
-	Main.Visible = false
-	MiniBtn.Visible = true
-end)
-
-MiniBtn.MouseButton1Click:Connect(function()
-	Main.Visible = true
-	MiniBtn.Visible = false
-end)
-
-print("[WarpGUI] Loaded. GUI muncul di kiri layar")
+print("[SlotWarpGUI] Loaded. 5 Slot + Speed Slider")
