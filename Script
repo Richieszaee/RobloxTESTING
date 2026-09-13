@@ -3,138 +3,141 @@ local TweenService = game:GetService("TweenService")
 local UIS = game:GetService("UserInputService")
 local LP = Players.LocalPlayer
 
-local TweenSpeed = 300 -- kecepatan tween. makin besar makin cepat
-local Moving = false
+local TweenSpeed = 50 -- ini kecepatan jalan. 50 = jalan santai, 300 = lari
+local BasePoint = nil
+local TargetPlayer = nil
+local CurrentTween = nil
+local Walking = false
 
--- GUI SIMPLE
+-- GUI CLASSIC
 local gui = Instance.new("ScreenGui", LP.PlayerGui)
-gui.Name = "TweenWalkHub"
+gui.Name = "WalkTweenClassic"
 gui.ResetOnSpawn = false
 
 local Main = Instance.new("Frame", gui)
-Main.Size = UDim2.new(0, 220, 0, 160)
+Main.Size = UDim2.new(0, 240, 0, 170)
 Main.Position = UDim2.new(0, 20, 0, 20)
-Main.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
+Main.BackgroundColor3 = Color3.fromRGB(12, 12, 16)
 Main.BorderSizePixel = 0
 Main.Active = true
 Main.Draggable = true
-Instance.new("UICorner", Main).CornerRadius = UDim.new(0,10)
-Instance.new("UIStroke", Main).Color = Color3.fromRGB(255, 170, 0)
+Instance.new("UICorner", Main).CornerRadius = UDim.new(0,12)
+
+-- GRADIENT PELANGI
+local gradient = Instance.new("UIGradient", Main)
+gradient.Color = ColorSequence.new{
+    ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 180, 0)),
+    ColorSequenceKeypoint.new(1, Color3.fromRGB(0, 180, 255))
+}
+gradient.Rotation = 45
+Instance.new("UIStroke", Main).Color = Color3.fromRGB(255,255,255)
+Main.UIStroke.Transparency = 0.3
 
 -- JUDUL
 local Title = Instance.new("TextLabel", Main)
-Title.Size = UDim2.new(1,-10,0,25)
+Title.Size = UDim2.new(1,-40,0,30)
 Title.Position = UDim2.new(0,10,0,5)
-Title.Text = "TWEEN WALK"
+Title.Text = "WALK TWEEN"
 Title.TextColor3 = Color3.new(1,1,1)
-Title.Font = Enum.Font.GothamBold
-Title.TextSize = 14
+Title.Font = Enum.Font.GothamBlack
+Title.TextSize = 16
 Title.BackgroundTransparency = 1
 
 -- SPEED LABEL
 local speedLabel = Instance.new("TextLabel", Main)
-speedLabel.Size = UDim2.new(1,-20,0,20)
+speedLabel.Size = UDim2.new(1,-20,0,15)
 speedLabel.Position = UDim2.new(0,10,0,32)
-speedLabel.Text = "Speed: "..TweenSpeed
-speedLabel.TextColor3 = Color3.fromRGB(255, 170, 0)
-speedLabel.Font = Enum.Font.GothamBold
-speedLabel.TextSize = 14
+speedLabel.Text = "Speed: "..TweenSpeed.." | Scroll"
+speedLabel.TextColor3 = Color3.fromRGB(200,200,200)
+speedLabel.Font = Enum.Font.Gotham
+speedLabel.TextSize = 10
 speedLabel.BackgroundTransparency = 1
 
--- TOMBOL - 
-local minusBtn = Instance.new("TextButton", Main)
-minusBtn.Size = UDim2.new(0, 45, 0, 30)
-minusBtn.Position = UDim2.new(0,10,0,55)
-minusBtn.Text = "-" minusBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
-minusBtn.TextColor3 = Color3.new(1,1,1) minusBtn.Font = Enum.Font.GothamBlack minusBtn.TextSize = 18
-Instance.new("UICorner", minusBtn).CornerRadius = UDim.new(0,8)
+-- FUNCTION JALAN PAKE TWEEN
+local function WalkTo(pos)
+	if Walking then if CurrentTween then CurrentTween:Cancel() end
+	local hrp = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
+	local humanoid = LP.Character and LP.Character:FindFirstChildOfClass("Humanoid")
+	if not hrp or not humanoid then return end
+	
+	Walking = true
+	humanoid.AutoRotate = true -- biar muter ngadep target
+	
+	local dist = (hrp.Position - pos.Position).Magnitude
+	local time = dist / TweenSpeed
+	
+	CurrentTween = TweenService:Create(hrp, TweenInfo.new(time, Enum.EasingStyle.Linear), {CFrame = pos})
+	CurrentTween:Play()
+	CurrentTween.Completed:Connect(function()
+	Walking = false
+		humanoid.AutoRotate = true
+	end)
+end
 
--- TOMBOL +
-local plusBtn = Instance.new("TextButton", Main)
-plusBtn.Size = UDim2.new(0, 45, 0, 30)
-plusBtn.Position = UDim2.new(0,165,0,55)
-plusBtn.Text = "+" plusBtn.BackgroundColor3 = Color3.fromRGB(0, 200, 80)
-plusBtn.TextColor3 = Color3.new(1,1,1) plusBtn.Font = Enum.Font.GothamBlack plusBtn.TextSize = 18
-Instance.new("UICorner", plusBtn).CornerRadius = UDim.new(0,8)
+local function MakeBtn(name, y, cb)
+    local b = Instance.new("TextButton", Main)
+    b.Size = UDim2.new(1,-20,0,30)
+    b.Position = UDim2.new(0,10,0,y)
+    b.Text = name
+    b.BackgroundColor3 = Color3.fromRGB(25,25,35)
+    b.TextColor3 = Color3.new(1,1,1)
+    b.Font = Enum.Font.GothamBold
+    b.TextSize = 13
+    Instance.new("UICorner", b).CornerRadius = UDim.new(0,8)
+    b.MouseButton1Click:Connect(cb)
+end
 
--- TOMBOL TWEEN KE DEPAN
-local forwardBtn = Instance.new("TextButton", Main)
-forwardBtn.Size = UDim2.new(1,-120,0,30)
-forwardBtn.Position = UDim2.new(0,60,0,55)
-forwardBtn.Text = "JALAN" forwardBtn.BackgroundColor3 = Color3.fromRGB(0, 170, 255)
-forwardBtn.TextColor3 = Color3.new(1,1,1) forwardBtn.Font = Enum.Font.GothamBold forwardBtn.TextSize = 12
-Instance.new("UICorner", forwardBtn).CornerRadius = UDim.new(0,8)
+-- TOMBOL 1
+MakeBtn("SET BASE", 55, function()
+	local hrp = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
+	if hrp then BasePoint = hrp.CFrame + Vector3.new(0,3,0) end
+end)
+
+-- TOMBOL 2
+MakeBtn("JALAN KE BASE", 88, function()
+	if BasePoint then WalkTo(BasePoint) end
+end)
+
+-- TOMBOL 3
+local playerList = Players:GetPlayers()
+local pIndex = 1
+if #playerList > 0 then TargetPlayer = playerList[1] end
+
+MakeBtn("JALAN KE: "..(TargetPlayer and TargetPlayer.Name or "None"), 121, function()
+	pIndex = pIndex % #playerList + 1
+	TargetPlayer = playerList[pIndex]
+	
+	if TargetPlayer and TargetPlayer.Character then
+		local hrp = TargetPlayer.Character:FindFirstChild("HumanoidRootPart")
+		if hrp then WalkTo(hrp) end
+	end
+end)
 
 -- TOMBOL STOP
-local stopBtn = Instance.new("TextButton", Main)
-stopBtn.Size = UDim2.new(1,-20,0,35)
-stopBtn.Position = UDim2.new(0,10,0,95)
-stopBtn.Text = "STOP" stopBtn.BackgroundColor3 = Color3.fromRGB(255, 50, 50)
-stopBtn.TextColor3 = Color3.new(1,1,1) stopBtn.Font = Enum.Font.GothamBlack stopBtn.TextSize = 14
-Instance.new("UICorner", stopBtn).CornerRadius = UDim.new(0,8)
-
--- TOMBOL TWEEN KE KURSOR
-local mouseBtn = Instance.new("TextButton", Main)
-mouseBtn.Size = UDim2.new(1,-20,0,30)
-mouseBtn.Position = UDim2.new(0,10,0,135)
-mouseBtn.Text = "TWEEN KE KURSOR" mouseBtn.BackgroundColor3 = Color3.fromRGB(150, 50, 255)
-mouseBtn.TextColor3 = Color3.new(1,1,1) mouseBtn.Font = Enum.Font.GothamBold mouseBtn.TextSize = 12
-Instance.new("UICorner", mouseBtn).CornerRadius = UDim.new(0,8)
-
-local CurrentTween = nil
-
--- FUNCTION
-local function TweenTo(pos)
-	if Moving then if CurrentTween then CurrentTween:Cancel() end
-	local hrp = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
-	if not hrp then return end
-	
-	Moving = true
-	local dist = (hrp.Position - pos).Magnitude
-	local time = dist / TweenSpeed
-	CurrentTween = TweenService:Create(hrp, TweenInfo.new(time, Enum.EasingStyle.Linear), {CFrame = CFrame.new(pos)})
-	CurrentTween:Play()
-	CurrentTween.Completed:Connect(function() Moving = false end)
-end
-
-local function UpdateLabel()
-	speedLabel.Text = "Speed: "..TweenSpeed
-end
-
-minusBtn.MouseButton1Click:Connect(function()
-	TweenSpeed = math.clamp(TweenSpeed - 50, 100, 1000)
-	UpdateLabel()
-end)
-
-plusBtn.MouseButton1Click:Connect(function()
-	TweenSpeed = math.clamp(TweenSpeed + 50, 100, 1000)
-	UpdateLabel()
-end)
-
-forwardBtn.MouseButton1Click:Connect(function()
-	local hrp = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
-	if hrp then
-		local targetPos = hrp.CFrame + hrp.CFrame.LookVector * 30 -- jalan maju 30 stud
-		TweenTo(targetPos.Position)
-	end
-end)
-
-stopBtn.MouseButton1Click:Connect(function()
+MakeBtn("STOP", 154, function()
 	if CurrentTween then CurrentTween:Cancel() end
-	Moving = false
+	Walking = false
 end)
 
-mouseBtn.MouseButton1Click:Connect(function()
-	local mouse = LP:GetMouse()
-	TweenTo(mouse.Hit.Position) -- tween ke tempat kursor klik
-end)
+-- CLOSE
+local closeBtn = Instance.new("TextButton", Main)
+closeBtn.Size = UDim2.new(0,20,0,20)
+closeBtn.Position = UDim2.new(1,-25,0,5)
+closeBtn.Text = "X"
+closeBtn.BackgroundColor3 = Color3.fromRGB(255,50,50)
+closeBtn.TextColor3 = Color3.new(1,1,1)
+closeBtn.Font = Enum.Font.GothamBold
+Instance.new("UICorner", closeBtn).CornerRadius = UDim.new(0,5)
+closeBtn.MouseButton1Click:Connect(function() gui:Destroy() end)
 
--- SCROLL BUAT GANTI SPEED
+-- SCROLL GANTI SPEED
 UIS.InputChanged:Connect(function(input)
 	if input.UserInputType == Enum.UserInputType.MouseWheel then
-		TweenSpeed = math.clamp(TweenSpeed + input.Position.Z * 50, 100, 1000)
-		UpdateLabel()
+		TweenSpeed = math.clamp(TweenSpeed + input.Position.Z * 10, 20, 300)
+		speedLabel.Text = "Speed: "..TweenSpeed.." | Scroll"
 	end
 end)
 
-print("[Tween Walk Hub] Loaded")
+Players.PlayerAdded:Connect(function(plr) table.insert(playerList, plr) end)
+
+print("[Walk Tween Classic] Loaded")
