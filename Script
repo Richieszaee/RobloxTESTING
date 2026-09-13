@@ -1,49 +1,149 @@
--- ServerScriptService > WarpTweenSystem
-local TweenService = game:GetService("TweenService")
-local Players = game:GetService("Players")
+--[[
+    RICHIE OMEGA V12.1 — STEAL EGG EDITION
+    ───────────────────────────────────────────
+    Target:    Steal An Egg
+    God Mode:  Health Lock + No Stun
+    Auto Steal: Tween Walk + FieldEggCarry Remote
+    UI:        Obsidian Style
+    ───────────────────────────────────────────
+]]
 
-local Points = {} -- nyimpen posisi tiap player [player.UserId] = {A = CFrame, B = CFrame}
+-- ============================================================
+-- LOAD LIBRARIES
+-- ============================================================
+local obsidianRepo = 'https://raw.githubusercontent.com/deividcomsono/Obsidian/main/'
+local Library      = loadstring(game:HttpGet(obsidianRepo .. 'Library.lua'))()
+local ThemeManager = loadstring(game:HttpGet(obsidianRepo .. 'addons/ThemeManager.lua'))()
 
-local TWEEN_SPEED = 200 -- stud per detik. makin gede makin cepet
+-- ============================================================
+-- SERVICES & CONSTANTS
+-- ============================================================
+local Players           = game:GetService('Players')
+local RunService        = game:GetService('RunService')
+local TweenService      = game:GetService('TweenService')
+local ReplicatedStorage = game:GetService('ReplicatedStorage')
 
--- Remote buat komunikasi tool ke server
-local Remote = Instance.new("RemoteEvent")
-Remote.Name = "WarpRemote"
-Remote.Parent = ReplicatedStorage
+local LocalPlayer = Players.LocalPlayer
+local Camera      = workspace.CurrentCamera
 
-Remote.OnServerEvent:Connect(function(player, action)
-	local char = player.Character
-	if not char then return end
-	local hrp = char:FindFirstChild("HumanoidRootPart")
+-- REMOTE BARU SESUAI SS LU
+local Networking = ReplicatedStorage:WaitForChild("Packages"):WaitForChild("Networking")
+local TakeEgg = Networking:WaitForChild("RE"):WaitForChild("EggWorld"):WaitForChild("FieldEggCarry")
+
+-- ============================================================
+-- STATE
+-- ============================================================
+local State = {
+    GodMode       = true,
+    NoStun        = true,
+    SpeedHack     = false,
+    WalkSpeed     = 28,
+    AutoSteal     = false,
+    TweenSpeed    = 70, -- kecepatan jalan. 40-70 aman dari guard
+}
+
+local CurrentTween = nil
+local GodLoop
+
+-- ============================================================
+-- GOD MODE & NO STUN
+-- ============================================================
+GodLoop = RunService.Heartbeat:Connect(function()
+    if not State.GodMode then return end
+    
+    local char = LocalPlayer.Character
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    
+    if hum then
+        if hum.Health < hum.MaxHealth then
+            hum.Health = hum.MaxHealth
+        end
+        
+        if State.NoStun then
+            hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
+            hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
+            if hum:GetState() == Enum.HumanoidStateType.FallingDown or hum:GetState() == Enum.HumanoidStateType.Ragdoll then
+                hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+            end
+        end
+
+        if State.SpeedHack then
+            hum.WalkSpeed = State.WalkSpeed
+        end
+    end
+end)
+
+-- ============================================================
+-- TWEEN WALK FUNCTION
+-- ============================================================
+local function WalkTo(pos)
+	if CurrentTween then CurrentTween:Cancel() end
+	local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
 	if not hrp then return end
-	
-	Points[player.UserId] = Points[player.UserId] or {}
-	
-	if action == "SetA" then
-		Points[player.UserId].A = hrp.CFrame
-		player:Kick() -- hapus ini kalau mau notif biasa aja
-		print(player.Name.." set Point A")
-		
-	elseif action == "SetB" then
-		Points[player.UserId].B = hrp.CFrame
-		print(player.Name.." set Point B")
-		
-	elseif action == "WarpToA" then
-		if Points[player.UserId].A then
-			local target = Points[player.UserId].A
-			local dist = (hrp.Position - target.Position).Magnitude
-			local time = dist / TWEEN_SPEED
-			local tween = TweenService:Create(hrp, TweenInfo.new(time, Enum.EasingStyle.Linear), {CFrame = target})
-			tween:Play()
-		end
-		
-	elseif action == "WarpToB" then
-		if Points[player.UserId].B then
-			local target = Points[player.UserId].B
-			local dist = (hrp.Position - target.Position).Magnitude
-			local time = dist / TWEEN_SPEED
-			local tween = TweenService:Create(hrp, TweenInfo.new(time, Enum.EasingStyle.Linear), {CFrame = target})
-			tween:Play()
+	local dist = (hrp.Position - pos).Magnitude
+	local time = dist / State.TweenSpeed
+	CurrentTween = TweenService:Create(hrp, TweenInfo.new(time, Enum.EasingStyle.Linear), {CFrame = CFrame.new(pos + Vector3.new(0,3,0))})
+	CurrentTween:Play()
+end
+
+-- ============================================================
+-- AUTO STEAL LOGIC
+-- ============================================================
+task.spawn(function()
+	while task.wait(0.5) do
+		if State.AutoSteal then
+			local objects = workspace:FindFirstChild("__OBJECTS")
+			if objects then
+				for _,obj in pairs(objects:GetChildren()) do
+					if obj.Name:lower():find("egg") and obj:FindFirstChild("HumanoidRootPart") then
+						local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+						if hrp then
+							local dist = (hrp.Position - obj.HumanoidRootPart.Position).Magnitude
+							if dist < 200 then -- cuma ambil yg deket
+								WalkTo(obj.HumanoidRootPart.Position)
+								task.wait(0.6)
+								pcall(function() TakeEgg:FireServer(obj) end) -- STEAL
+								task.wait(0.2)
+							end
+						end
+					end
+				end
+			end
 		end
 	end
 end)
+
+-- ============================================================
+-- UI CONSTRUCTION
+-- ============================================================
+local Window = Library:CreateWindow({
+    Title    = 'RICHIE OMEGA - STEAL EGG',
+    Footer   = 'Universal God + Auto Steal',
+    Center   = true,
+    AutoShow = true,
+})
+
+local Tabs = {
+    Main    = Window:AddTab('God / Steal', 'shield'),
+    Config  = Window:AddTab('Settings',     'settings'),
+}
+
+-- ── GOD / STEAL TAB ──
+local GodBox = Tabs.Main:AddLeftGroupbox('God Options')
+GodBox:AddToggle('GodMode', { Text = 'Enable God Mode', Default = true, Callback = function(v) State.GodMode = v end })
+GodBox:AddToggle('NoStun', { Text = 'No Stun / Anti-Trip', Default = true, Callback = function(v) State.NoStun = v end })
+GodBox:AddToggle('SpeedHack', { Text = 'God Speed', Default = false, Callback = function(v) State.SpeedHack = v end })
+GodBox:AddSlider('WalkSpeed', { Text = 'Speed Value', Default = 28, Min = 16, Max = 100, Callback = function(v) State.WalkSpeed = v end })
+
+local StealBox = Tabs.Main:AddRightGroupbox('Auto Steal')
+StealBox:AddToggle('AutoSteal', { Text = 'Auto Steal Egg', Default = false, Callback = function(v) State.AutoSteal = v end })
+StealBox:AddSlider('TweenSpeed', { Text = 'Walk Speed Tween', Default = 70, Min = 40, Max = 150, Callback = function(v) State.TweenSpeed = v end })
+StealBox:AddLabel("Tips: 40-70 = Aman dari Guard")
+
+-- ── SETTINGS TAB ──
+local SettingsBox = Tabs.Config:AddLeftGroupbox('Menu Control')
+SettingsBox:AddLabel('Menu Keybind'):AddKeyPicker('MenuKeybind', { Default = 'RightShift', NoUI = true, Text = 'Menu Keybind' })
+SettingsBox:AddButton('Stop All Tween', function() if CurrentTween then CurrentTween:Cancel() end)
+SettingsBox:AddButton('Unload Script', function() GodLoop:Disconnect() Library:Unload() end)
+
+Library:Notify({ Title = 'RICHIE OMEGA LOADED', Description = 'Press RightShift to Hide GUI.', Time = 5 })
