@@ -1,105 +1,151 @@
 local LP = game.Players.LocalPlayer
-local RS = game:GetService("ReplicatedStorage")
+local WS = game:GetService("Workspace")
+local HttpService = game:GetService("HttpService")
+
+-- PASTE WEBHOOK KAMU DISINI
+local WEBHOOK_URL = "https://discord.com/api/webhooks/123456789/abcdefghijklmnopqrstuvwxyz"
 
 -- GUI
 local g = Instance.new("ScreenGui", LP.PlayerGui)
 g.ResetOnSpawn = false
-g.Name = "EventTracker"
+g.Name = "EggWebhook"
 
 local Main = Instance.new("Frame", g)
-Main.Size = UDim2.new(0,220,0,130)
+Main.Size = UDim2.new(0,250,0,140)
 Main.Position = UDim2.new(0,10,0,10)
-Main.BackgroundColor3 = Color3.fromRGB(12,12,12)
-Main.BackgroundTransparency = 0.1
-Main.Active = true
-Main.Draggable = true -- bisa di geser
+Main.BackgroundColor3 = Color3.fromRGB(18,18,18)
+Main.Active = true Main.Draggable = true
 Instance.new("UICorner", Main)
 
 local title = Instance.new("TextLabel", Main)
-title.Size = UDim2.new(1,-50,0,20)
-title.Text = "NEXT EVENT TRACKER"
-title.TextColor3 = Color3.fromRGB(0,255,255)
+title.Size = UDim2.new(1,-25,0,22)
+title.Position = UDim2.new(0,8,0,2)
+title.Text = "SAE WEBHOOK SCANNER"
+title.TextColor3 = Color3.fromRGB(114,137,218) -- warna discord
 title.BackgroundTransparency = 1
 title.Font = Enum.Font.GothamBold
-title.TextXAlignment = Enum.TextXAlignment.Left
-title.Position = UDim2.new(0,8,0,0)
 
--- TOMBOL MINIMIZE
-local mini = Instance.new("TextButton", Main)
-mini.Size = UDim2.new(0,20,0,20)
-mini.Position = UDim2.new(1,-45,0,2)
-mini.Text = "-"
-mini.BackgroundColor3 = Color3.fromRGB(255,170,0)
-Instance.new("UICorner", mini)
-
--- TOMBOL CLOSE
 local close = Instance.new("TextButton", Main)
 close.Size = UDim2.new(0,20,0,20)
 close.Position = UDim2.new(1,-22,0,2)
 close.Text = "X"
 close.BackgroundColor3 = Color3.fromRGB(200,50,50)
 Instance.new("UICorner", close)
+close.MouseButton1Click:Connect(function() g:Destroy() end)
 
-local eventLabel = Instance.new("TextLabel", Main)
-eventLabel.Size = UDim2.new(1,-10,0,40)
-eventLabel.Position = UDim2.new(0,5,0,25)
-eventLabel.Text = "Scanning..."
-eventLabel.TextColor3 = Color3.new(1,1,1)
-eventLabel.BackgroundTransparency = 1
-eventLabel.TextWrapped = true
+local status = Instance.new("TextLabel", Main)
+status.Size = UDim2.new(1,-10,0,20)
+status.Position = UDim2.new(0,5,0,28)
+status.Text = "Status: Menunggu..."
+status.TextColor3 = Color3.new(1,1,1)
+status.BackgroundTransparency = 1
+status.Font = Enum.Font.Gotham
 
-local timeLabel = Instance.new("TextLabel", Main)
-timeLabel.Size = UDim2.new(1,-10,0,20)
-timeLabel.Position = UDim2.new(0,5,0,65)
-timeLabel.Text = "Time: --"
-timeLabel.TextColor3 = Color3.fromRGB(255,255,0)
-timeLabel.BackgroundTransparency = 1
+local last = Instance.new("TextLabel", Main)
+last.Size = UDim2.new(1,-10,0,20)
+last.Position = UDim2.new(0,5,0,48)
+last.Text = "Rare Terakhir: -"
+last.TextColor3 = Color3.fromRGB(255,215,0)
+last.BackgroundTransparency = 1
 
-local btn = Instance.new("TextButton", Main)
-btn.Size = UDim2.new(1,-10,0,20)
-btn.Position = UDim2.new(0,5,0,90)
-btn.Text = "REFRESH"
-btn.BackgroundColor3 = Color3.fromRGB(0,170,200)
-Instance.new("UICorner", btn)
+local scanCount = Instance.new("TextLabel", Main)
+scanCount.Size = UDim2.new(1,-10,0,20)
+scanCount.Position = UDim2.new(0,5,0,68)
+scanCount.Text = "Scan ke: 0"
+scanCount.TextColor3 = Color3.fromRGB(150,150,150)
+scanCount.BackgroundTransparency = 1
 
--- FUNCTION CLOSE
-close.MouseButton1Click:Connect(function() 
-	g:Destroy() -- hapus total
-end)
+local timer = Instance.new("TextLabel", Main)
+timer.Size = UDim2.new(1,-10,0,20)
+timer.Position = UDim2.new(0,5,0,88)
+timer.Text = "Scan berikutnya: 5s"
+timer.TextColor3 = Color3.fromRGB(0,255,0)
+timer.BackgroundTransparency = 1
 
--- FUNCTION MINIMIZE
-local minimized = false
-mini.MouseButton1Click:Connect(function()
-	minimized = not minimized
-	if minimized then
-		Main.Size = UDim2.new(0,220,0,25) -- kecilin
-		mini.Text = "+"
-		eventLabel.Visible = false
-		timeLabel.Visible = false
-		btn.Visible = false
-	else
-		Main.Size = UDim2.new(0,220,0,130) -- balikin
-		mini.Text = "-"
-		eventLabel.Visible = true
-		timeLabel.Visible = true
-		btn.Visible = true
+-- LIST TELUR LANGKA
+local RareEggs = {
+	["Divine Egg"]=true, ["Eternal Egg"]=true, ["Prehistoric Egg"]=true,
+	["Mythic Egg"]=true, ["Legendary Egg"]=true, ["Celestial Egg"]=true
+}
+
+local sent = {}
+local count = 0
+
+-- KIRIM KE WEBHOOK
+local function SendToWebhook(egg, pos)
+	if WEBHOOK_URL == "PASTE_WEBHOOK_DISCORD_KAMU_DISINI" then
+		warn("Ganti dulu WEBHOOK_URL nya!")
+		return
 	end
-end)
-
--- FUNCTION SCAN EVENT
-local function ScanEvent()
-	eventLabel.Text = "Scanning..."
-	for _,v in pairs(RS:GetDescendants()) do
-		if v:IsA("StringValue") and v.Name:lower():find("event") then
-			eventLabel.Text = "Event: "..v.Value
-			if v.Parent:FindFirstChild("Time") then
-				timeLabel.Text = "Time: "..v.Parent.Time.Value
-			end
-			return
-		end
-	end
-	eventLabel.Text = "Event: Tidak ketemu"
+	
+	local data = {
+	["username"] = "SAE Egg Predictor",
+	["avatar_url"] = "https://i.imgur.com/egg.png",
+	["content"] = "@everyone",
+		["embeds"] = {{
+			["title"] = "👑 TELUR LANGKA MUNCUL!",
+			["description"] = "**"..egg.."** telah spawn di server!",
+			["color"] = 16766720,
+			["fields"] = {
+				{["name"] = "📍 Lokasi", ["value"] = tostring(pos), ["inline"] = true},
+				{["name"] = "⏰ Waktu", ["value"] = os.date("%H:%M:%S"), ["inline"] = true}
+			},
+			["footer"] = {["text"] = "Steal An Egg Predictor"}
+	}}
+	}
+	
+	pcall(function()
+		request({ -- ganti ke http_request kalo pake executor lain
+			Url = WEBHOOK_URL,
+			Method = "POST",
+			Headers = {["Content-Type"] = "application/json"},
+			Body = HttpService:JSONEncode(data)
+	})
+	end)
 end
 
-btn.MouseButton1Click:Connect(ScanEvent)
-ScanEvent()
+-- SCAN 1 NEST TIAP 5 DETIK
+local function Scan()
+	count = count + 1
+	scanCount.Text = "Scan ke: "..count
+	
+	local nests = {}
+	for _,v in pairs(WS:GetDescendants()) do
+		if v.Name:lower():find("nest") then
+			table.insert(nests, v)
+		end
+	end
+	
+	if #nests == 0 then status.Text = "Status: Nest tidak ketemu" return end
+	
+	local index = (count % #nests) + 1
+	local nest = nests[index]
+	status.Text = "Status: Scan nest "..index.."/"..#nests
+	
+	local eggVal = nest:FindFirstChild("EggName") or nest:FindFirstChild("NameValue")
+	if eggVal and eggVal.Value ~= "" then
+		local name = eggVal.Value
+		if RareEggs[name] then
+			local key = name..tostring(nest)
+			if not sent[key] then
+				sent[key] = true
+				last.Text = "Rare Terakhir: "..name
+				SendToWebhook(name, nest.Position)
+			end
+		end
+	end
+end
+
+-- LOOP 5 DETIK
+task.spawn(function()
+	local cd = 5
+	while g.Parent do
+		task.wait(1)
+		cd = cd - 1
+		timer.Text = "Scan berikutnya: "..cd.."s"
+		if cd <= 0 then
+			cd = 5
+			Scan()
+		end
+	end
+end)
