@@ -1,871 +1,355 @@
 --[[
-	Exec Log System v2 - GUI Edition
-	Fitur: Chat Monitor + Player Join Monitor + Exec Log
+	EXEC LOG GUI - Simple Style
+	Style: SAE GUI V16
 ]]
 
---// ============ LOAD RAYFIELD ============
-local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
-
---// ============ DEFAULT CONFIG ============
-getgenv().whscript       = "My Script"
-getgenv().webhookexecUrl = "https://discord.com/api/webhooks/123456789/abcdefghijklmnopqrstuvwxyz"
-getgenv().ExecLogSecret  = false
-getgenv().LogChat        = false
-getgenv().LogJoin        = false
-getgenv().LogLeave       = false
-getgenv().LogExec        = false
-getgenv().Prefix         = "[LOG]"
-
---// ============ HELPER ============
-local HttpService = game:GetService("HttpService")
 local Players     = game:GetService("Players")
+local HttpService = game:GetService("HttpService")
 local Stats       = game:GetService("Stats")
-local UIS         = game:GetService("UserInputService")
-local LP          = Players.LocalPlayer
+local player      = Players.LocalPlayer
 
-local function sendWebhook(embed, content)
-    if not getgenv().webhookexecUrl or getgenv().webhookexecUrl == "" then return end
-    local body = HttpService:JSONEncode({
-        content = content or "",
-        embeds  = embed and {embed} or {}
-    })
-    local req = http_request or request or (syn and syn.request) or (fluxus and fluxus.request) or (http and http.request)
-    if not req then return end
-    pcall(function()
-        req({
-            Url = getgenv().webhookexecUrl,
-            Method = "POST",
-            Headers = {["content-type"] = "application/json"},
-            Body = body
-        })
-    end)
+--// CONFIG
+getgenv().webhookUrl  = ""
+getgenv().whscript    = "My Script"
+getgenv().LogChat     = false
+getgenv().LogJoin     = false
+getgenv().LogLeave    = false
+getgenv().LogSecret   = false
+
+--// GUI
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "ExecLogGUI"
+ScreenGui.Parent = game:GetService("CoreGui")
+ScreenGui.ResetOnSpawn = false
+
+local Frame = Instance.new("Frame")
+Frame.Parent = ScreenGui
+Frame.Size = UDim2.new(0, 260, 0, 400)
+Frame.Position = UDim2.new(0, 20, 0, 100)
+Frame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+Frame.BorderSizePixel = 0
+Frame.Active = true
+Frame.Draggable = true
+
+local Title = Instance.new("TextLabel")
+Title.Parent = Frame
+Title.Size = UDim2.new(1, 0, 0, 28)
+Title.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+Title.Text = "📡 Exec Log GUI"
+Title.TextColor3 = Color3.fromRGB(0, 255, 0)
+Title.Font = Enum.Font.SourceSansBold
+Title.TextSize = 15
+Title.BorderSizePixel = 0
+
+--// HELPER: Input Box
+local function CreateInput(placeholder, yPos, callback)
+	local box = Instance.new("TextBox")
+	box.Parent = Frame
+	box.Size = UDim2.new(0, 240, 0, 28)
+	box.Position = UDim2.new(0, 10, 0, yPos)
+	box.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+	box.BorderSizePixel = 0
+	box.Text = ""
+	box.PlaceholderText = placeholder
+	box.TextColor3 = Color3.fromRGB(255, 255, 255)
+	box.PlaceholderColor3 = Color3.fromRGB(140, 140, 140)
+	box.Font = Enum.Font.SourceSans
+	box.TextSize = 12
+	box.ClearTextOnFocus = false
+	box.TextXAlignment = Enum.TextXAlignment.Left
+	box:GetPropertyChangedSignal("Text"):Connect(function()
+		callback(box.Text)
+	end)
+	return box
 end
 
-local function baseFooter()
-    return {
-        text = "Exec Log v2 | " .. os.date("%Y-%m-%d %H:%M:%S"),
-        icon_url = "https://cdn.discordapp.com/icons/874587083291885608/a_80373524586aab90765f4b1e833fdf5a.gif?size=512"
-    }
+--// HELPER: Button
+local function CreateButton(name, yPos, callback)
+	local btn = Instance.new("TextButton")
+	btn.Parent = Frame
+	btn.Size = UDim2.new(0, 240, 0, 28)
+	btn.Position = UDim2.new(0, 10, 0, yPos)
+	btn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+	btn.BorderSizePixel = 0
+	btn.Text = name
+	btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+	btn.Font = Enum.Font.SourceSans
+	btn.TextSize = 13
+	btn.MouseButton1Click:Connect(callback)
+	return btn
 end
 
-local function thumbURL()
-    return "https://cdn.discordapp.com/icons/874587083291885608/a_80373524586aab90765f4b1e833fdf5a.gif?size=512"
+--// HELPER: Label
+local function CreateLabel(text, yPos)
+	local lbl = Instance.new("TextLabel")
+	lbl.Parent = Frame
+	lbl.Size = UDim2.new(0, 240, 0, 18)
+	lbl.Position = UDim2.new(0, 10, 0, yPos)
+	lbl.BackgroundTransparency = 1
+	lbl.Text = text
+	lbl.TextColor3 = Color3.fromRGB(180, 180, 180)
+	lbl.Font = Enum.Font.SourceSansBold
+	lbl.TextSize = 12
+	lbl.TextXAlignment = Enum.TextXAlignment.Left
+	return lbl
 end
 
---// ============ WINDOW ============
-local Window = Rayfield:CreateWindow({
-    Name = "Exec Log System v2",
-    LoadingTitle = "Loading Exec Log...",
-    LoadingSubtitle = "by Your Name",
-    ConfigurationSaving = {
-        Enabled = true,
-        FolderName = "ExecLogSystem",
-        FileName = "ConfigV2"
-    },
-    Discord = { Enabled = false, Invite = "noinvite", RememberJoins = true },
-    KeySystem = false
-})
+--// HELPER: Status Label (buat notif)
+local statusLbl = Instance.new("TextLabel")
+statusLbl.Parent = Frame
+statusLbl.Size = UDim2.new(1, -20, 0, 20)
+statusLbl.Position = UDim2.new(0, 10, 1, -25)
+statusLbl.BackgroundTransparency = 1
+statusLbl.Text = "Ready."
+statusLbl.TextColor3 = Color3.fromRGB(0, 255, 0)
+statusLbl.Font = Enum.Font.SourceSans
+statusLbl.TextSize = 12
+statusLbl.TextXAlignment = Enum.TextXAlignment.Left
 
-local MainTab   = Window:CreateTab("⚙️ Config", 4483362458)
-local MonTab    = Window:CreateTab("📡 Monitor", 4483362458)
-local TestTab   = Window:CreateTab("🧪 Test", 4483362458)
-local AboutTab  = Window:CreateTab("ℹ️ About", 4483362458)
-
---// ============ MAIN TAB ============
-MainTab:CreateSection("Webhook")
-
-MainTab:CreateInput({
-    Name = "Webhook URL",
-    PlaceholderText = "https://discord.com/api/webhooks/...",
-    RemoveTextAfterFocusLost = false,
-    Flag = "WebhookUrl",
-    Callback = function(txt) getgenv().webhookexecUrl = txt end
-})
-
-MainTab:CreateInput({
-    Name = "Script Name (untuk Exec Log)",
-    PlaceholderText = "Nama script kamu",
-    RemoveTextAfterFocusLost = false,
-    Flag = "ScriptName",
-    Callback = function(txt) getgenv().whscript = txt end
-})
-
-MainTab:CreateInput({
-    Name = "Chat Prefix Filter (opsional)",
-    PlaceholderText = "Contoh: !  (kosongkan untuk semua chat)",
-    RemoveTextAfterFocusLost = false,
-    Flag = "ChatPrefix",
-    Callback = function(txt) getgenv().Prefix = txt end
-})
-
-MainTab:CreateSection("Toggle Fitur")
-
-MainTab:CreateToggle({
-    Name = "📨 Log Chat Messages",
-    CurrentValue = false,
-    Flag = "T_LogChat",
-    Callback = function(v) getgenv().LogChat = v end
-})
-
-MainTab:CreateToggle({
-    Name = "🟢 Log Player Join",
-    CurrentValue = false,
-    Flag = "T_LogJoin",
-    Callback = function(v) getgenv().LogJoin = v end
-})
-
-MainTab:CreateToggle({
-    Name = "🔴 Log Player Leave",
-    CurrentValue = false,
-    Flag = "T_LogLeave",
-    Callback = function(v) getgenv().LogLeave = v end
-})
-
-MainTab:CreateToggle({
-    Name = "🚀 Log Exec (kirim saat script ini dijalankan)",
-    CurrentValue = false,
-    Flag = "T_LogExec",
-    Callback = function(v) getgenv().LogExec = v end
-})
-
-MainTab:CreateToggle({
-    Name = "🤫 Log Secret (IP, Country, dll)",
-    CurrentValue = false,
-    Flag = "T_LogSecret",
-    Callback = function(v) getgenv().ExecLogSecret = v end
-})
-
---// ============ MONITOR TAB ============
-MonTab:CreateSection("Status Monitor")
-
-local statusPara = MonTab:CreateParagraph({
-    Title = "Status",
-    Content = "Chat: OFF | Join: OFF | Leave: OFF"
-})
-
-local function refreshStatus()
-    statusPara:Set({
-        Title = "Status",
-        Content = string.format(
-            "Webhook: %s\nChat: %s | Join: %s | Leave: %s",
-            (getgenv().webhookexecUrl ~= "" and "✔ Set" or "✘ Kosong"),
-            (getgenv().LogChat and "✔ ON" or "✘ OFF"),
-            (getgenv().LogJoin and "✔ ON" or "✘ OFF"),
-            (getgenv().LogLeave and "✔ ON" or "✘ OFF")
-        )
-    })
+local function setStatus(txt, color)
+	statusLbl.Text = txt
+	statusLbl.TextColor3 = color or Color3.fromRGB(0, 255, 0)
 end
-refreshStatus()
-task.spawn(function()
-    while task.wait(2) do refreshStatus() end
+
+--// WEBHOOK FUNCTION
+local function sendWebhook(embed)
+	if not getgenv().webhookUrl or getgenv().webhookUrl == "" then
+		setStatus("❌ Webhook URL kosong!", Color3.fromRGB(255, 80, 80))
+		return false
+	end
+	local body = HttpService:JSONEncode({
+		content = "",
+		embeds = {embed}
+	})
+	local req = http_request or request or (syn and syn.request) or (fluxus and fluxus.request) or (http and http.request)
+	if not req then
+		setStatus("❌ Executor tidak support HttpPost", Color3.fromRGB(255, 80, 80))
+		return false
+	end
+	local ok = pcall(function()
+		req({
+			Url = getgenv().webhookUrl,
+			Method = "POST",
+			Headers = {["content-type"] = "application/json"},
+			Body = body
+		})
+	end)
+	if ok then
+		setStatus("✅ Terkirim ke Discord", Color3.fromRGB(0, 255, 0))
+	else
+		setStatus("❌ Gagal kirim webhook", Color3.fromRGB(255, 80, 80))
+	end
+	return ok
+end
+
+local function footer()
+	return {
+		text = "Exec Log | " .. os.date("%Y-%m-%d %H:%M:%S"),
+		icon_url = "https://cdn.discordapp.com/icons/874587083291885608/a_80373524586aab90765f4b1e833fdf5a.gif?size=512"
+	}
+end
+
+--// UI ELEMENTS
+CreateLabel("Webhook URL:", 35)
+CreateInput("https://discord.com/api/webhooks/...", 55, function(txt)
+	getgenv().webhookUrl = txt
 end)
 
-MonTab:CreateButton({
-    Name = "🔄 Refresh Status",
-    Callback = function() refreshStatus() end
-})
+CreateLabel("Script Name:", 90)
+CreateInput("My Script", 110, function(txt)
+	getgenv().whscript = txt
+end)
 
-MonTab:CreateSection("Recent Logs (preview lokal)")
-local logBox = MonTab:CreateParagraph({ Title = "Log Lokal", Content = "(belum ada)" })
-local recentLogs = {}
-local function pushLog(txt)
-    table.insert(recentLogs, 1, "• " .. txt)
-    if #recentLogs > 8 then table.remove(recentLogs) end
-    logBox:Set({ Title = "Log Lokal", Content = table.concat(recentLogs, "\n") })
-end
+CreateLabel("Monitor:", 145)
+local y = 165
 
---// ============ TEST TAB ============
-TestTab:CreateSection("Test Webhook")
+local ChatBtn = CreateButton("Chat Log: OFF", y, function()
+	getgenv().LogChat = not getgenv().LogChat
+	ChatBtn.Text = "Chat Log: " .. (getgenv().LogChat and "ON" or "OFF")
+	ChatBtn.BackgroundColor3 = getgenv().LogChat and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(60, 60, 60)
+end)
+y = y + 32
 
-TestTab:CreateButton({
-    Name = "🧪 Kirim Test Ping",
-    Callback = function()
-        if getgenv().webhookexecUrl == "" then
-            Rayfield:Notify({Title = "Error", Content = "Webhook URL belum diisi!", Duration = 4})
-            return
-        end
-        sendWebhook({
-            title = "🧪 Test Ping",
-            description = "Webhook berhasil terhubung!",
-            color = 0x2ecc71,
-            footer = baseFooter()
-        })
-        Rayfield:Notify({Title = "Sent", Content = "Test ping terkirim!", Duration = 3})
-    end
-})
+local JoinBtn = CreateButton("Join Log: OFF", y, function()
+	getgenv().LogJoin = not getgenv().LogJoin
+	JoinBtn.Text = "Join Log: " .. (getgenv().LogJoin and "ON" or "OFF")
+	JoinBtn.BackgroundColor3 = getgenv().LogJoin and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(60, 60, 60)
+end)
+y = y + 32
 
-TestTab:CreateButton({
-    Name = "📨 Test Chat Log",
-    Callback = function()
-        sendWebhook({
-            title = "📨 Test Chat Log",
-            description = "Contoh log chat dari player.",
-            color = 0x3498db,
-            fields = {
-                {name = "Player", value = "`TestUser`", inline = true},
-                {name = "Message", value = "`Halo semua!`", inline = false}
-            },
-            footer = baseFooter()
-        })
-        Rayfield:Notify({Title = "Sent", Content = "Test chat log terkirim!", Duration = 3})
-    end
-})
+local LeaveBtn = CreateButton("Leave Log: OFF", y, function()
+	getgenv().LogLeave = not getgenv().LogLeave
+	LeaveBtn.Text = "Leave Log: " .. (getgenv().LogLeave and "ON" or "OFF")
+	LeaveBtn.BackgroundColor3 = getgenv().LogLeave and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(60, 60, 60)
+end)
+y = y + 32
 
-TestTab:CreateButton({
-    Name = "🟢 Test Join Log",
-    Callback = function()
-        sendWebhook({
-            title = "🟢 Player Joined",
-            description = "Contoh log player join.",
-            color = 0x2ecc71,
-            fields = {
-                {name = "Username", value = "`TestUser`", inline = true},
-                {name = "UserID", value = "`123456`", inline = true}
-            },
-            footer = baseFooter()
-        })
-        Rayfield:Notify({Title = "Sent", Content = "Test join log terkirim!", Duration = 3})
-    end
-})
+local SecretBtn = CreateButton("Secret Log: OFF", y, function()
+	getgenv().LogSecret = not getgenv().LogSecret
+	SecretBtn.Text = "Secret Log: " .. (getgenv().LogSecret and "ON" or "OFF")
+	SecretBtn.BackgroundColor3 = getgenv().LogSecret and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(60, 60, 60)
+end)
+y = y + 40
 
---// ============ ABOUT TAB ============
-AboutTab:CreateSection("Exec Log System v2")
-AboutTab:CreateParagraph({Title = "Versi", Content = "v2.0.0"})
-AboutTab:CreateParagraph({
-    Title = "Fitur",
-    Content = "Monitor chat, player join/leave, dan exec log → kirim ke Discord webhook."
-})
-AboutTab:CreateParagraph({
-    Title = "Tips",
-    Content = "Kalau webhook nggak masuk, cek URL, cek koneksi, dan pastikan executor support HttpPost."
-})
+--// ACTIONS
+CreateButton("🚀 Kirim Exec Log", y, function()
+	setStatus("Mengirim exec log...", Color3.fromRGB(255, 200, 0))
+	local userid = player.UserId
+	local gameid = game.PlaceId
+	local jobid  = tostring(game.JobId)
+	local ok, gameInfo = pcall(function()
+		return game:GetService("MarketplaceService"):GetProductInfo(game.PlaceId)
+	end)
+	local gameName = ok and gameInfo.Name or "Unknown"
+	local snipePlay = "game:GetService('TeleportService'):TeleportToPlaceInstance(" .. gameid .. ", '" .. jobid .. "', player)"
+	local completeTime = os.date("%Y-%m-%d %H:%M:%S")
+	local ws = workspace
+	local sw = math.floor(ws.CurrentCamera.ViewportSize.X)
+	local sh = math.floor(ws.CurrentCamera.ViewportSize.Y)
+	local mem = Stats:GetTotalMemoryUsageMb()
+	local pc  = #Players:GetPlayers()
+	local mp  = Players.MaxPlayers
+	local health = player.Character and player.Character:FindFirstChild("Humanoid") and player.Character.Humanoid.Health or "N/A"
+	local maxHP  = player.Character and player.Character:FindFirstChild("Humanoid") and player.Character.Humanoid.MaxHealth or "N/A"
+	local pos    = player.Character and player.Character:FindFirstChild("HumanoidRootPart") and player.Character.HumanoidRootPart.Position or "N/A"
 
---// ============ FITUR MONITOR ============
-local Players = game:GetService("Players")
+	local ping = "N/A"
+	pcall(function()
+		local dp = Stats.Network.ServerStatsItem["Data Ping"]:GetValueString()
+		ping = tonumber(dp:match("(%d+)")) or "N/A"
+	end)
 
--- Chat listener (TextChatService baru + Legacy fallback)
-local function hookTextChatService()
-    local TC = game:GetService("TextChatService")
-    if TC.ChatVersion == Enum.ChatVersion.TextChatService then
-        TC.MessageReceived:Connect(function(msg)
-            if not getgenv().LogChat then return end
-            local prefix = getgenv().Prefix or ""
-            local text = msg.Text or ""
-            if prefix ~= "" and text:sub(1, #prefix) ~= prefix then return end
-            local sender = msg.TextSource and msg.TextSource.Name or "Unknown"
-            local userId = msg.TextSource and msg.TextSource.UserId or 0
-            sendWebhook({
-                title = "📨 Chat Message",
-                description = "Pesan baru di chat.",
-                color = 0x3498db,
-                fields = {
-                    {name = "👤 Sender", value = "`" .. sender .. "`", inline = true},
-                    {name = "🆔 UserID", value = "`" .. tostring(userId) .. "`", inline = true},
-                    {name = "💬 Message", value = "```" .. text .. "```", inline = false}
-                },
-                footer = baseFooter(),
-                thumbnail = {url = thumbURL()}
-            })
-            pushLog("[Chat] " .. sender .. ": " .. text)
-        end)
-    end
+	local premium = "false"
+	local ok2, res = pcall(function() return player.MembershipType end)
+	if ok2 then premium = res == Enum.MembershipType.None and "false" or "true" end
+
+	local embed = {
+		title = "🚀 Script Execution Detected",
+		description = "*Script dijalankan di server.*",
+		color = 0x3498db,
+		fields = {
+			{name = "🔍 Script Info", value = "```💻 " .. getgenv().whscript .. "\n⏰ " .. completeTime .. "```", inline = false},
+			{name = "👤 Player", value = "```🧸 " .. player.Name .. "\n📝 " .. player.DisplayName .. "\n🆔 " .. userid .. "\n❤️ " .. health .. " / " .. maxHP .. "```", inline = false},
+			{name = "📅 Account", value = "```🗓️ " .. player.AccountAge .. " days\n💎 Premium: " .. premium .. "```", inline = false},
+			{name = "🎮 Game", value = "```🏷️ " .. gameName .. "\n🆔 " .. gameid .. "```", inline = false},
+			{name = "🕹️ Server", value = "```👥 " .. pc .. " / " .. mp .. "```", inline = true},
+			{name = "📡 Ping", value = "```📶 " .. ping .. " ms```", inline = true},
+			{name = "🖥️ System", value = "```📺 " .. sw .. "x" .. sh .. "\n🔍 " .. mem .. " MB\n⚙️ " .. tostring(identifyexecutor()) .. "```", inline = true},
+			{name = "📍 Position", value = "```📍 " .. tostring(pos) .. "```", inline = true},
+			{name = "🪧 Join Script", value = "```lua\n" .. snipePlay .. "```", inline = false}
+		},
+		footer = footer(),
+		thumbnail = {url = "https://cdn.discordapp.com/icons/874587083291885608/a_80373524586aab90765f4b1e833fdf5a.gif?size=512"}
+	}
+
+	if getgenv().LogSecret then
+		pcall(function()
+			local ip = game:HttpGet("https://api.ipify.org")
+			local info = HttpService:JSONDecode(game:HttpGet("https://ipinfo.io/" .. ip .. "/json"))
+			table.insert(embed.fields, {
+				name = "🤫 Secret",
+				value = "||👣 IP: " .. tostring(info.ip) .. "||\n||🌆 Country: " .. tostring(info.country) .. "||\n||🪟 GPS: " .. tostring(info.loc) .. "||\n||🏙️ City: " .. tostring(info.city) .. "||\n||🏡 Region: " .. tostring(info.region) .. "||\n||🪢 Hoster: " .. tostring(info.org) .. "||"
+			})
+		end)
+	end
+
+	sendWebhook(embed)
+end)
+y = y + 32
+
+CreateButton("🧪 Test Webhook", y, function()
+	sendWebhook({
+		title = "🧪 Test Ping",
+		description = "Webhook berhasil terhubung!",
+		color = 0x2ecc71,
+		footer = footer()
+	})
+end)
+y = y + 32
+
+CreateButton("❌ Close", y, function()
+	ScreenGui:Destroy()
+end)
+
+-- Frame height auto-adjust
+Frame.Size = UDim2.new(0, 260, 0, y + 60)
+
+--// ============ CHAT MONITOR ============
+local function hookTextChat()
+	local TC = game:GetService("TextChatService")
+	if TC.ChatVersion == Enum.ChatVersion.TextChatService then
+		TC.MessageReceived:Connect(function(msg)
+			if not getgenv().LogChat then return end
+			local sender = msg.TextSource and msg.TextSource.Name or "Unknown"
+			local uid = msg.TextSource and msg.TextSource.UserId or 0
+			local text = msg.Text or ""
+			sendWebhook({
+				title = "📨 Chat Message",
+				color = 0x3498db,
+				fields = {
+					{name = "👤 Sender", value = "`" .. sender .. "`", inline = true},
+					{name = "🆔 UserID", value = "`" .. tostring(uid) .. "`", inline = true},
+					{name = "💬 Message", value = "```" .. text .. "```", inline = false}
+				},
+				footer = footer()
+			})
+		end)
+	end
 end
 
 local function hookLegacyChat()
-    local RP = game:GetService("ReplicatedStorage")
-    local defaultChat = RP:FindFirstChild("DefaultChatSystemChatEvents")
-    if defaultChat then
-        local onMessage = defaultChat:FindFirstChild("OnMessageDoneFiltering")
-        if onMessage then
-            onMessage.OnClientEvent:Connect(function(data)
-                if not getgenv().LogChat then return end
-                local prefix = getgenv().Prefix or ""
-                local text = data.Message or ""
-                if prefix ~= "" and text:sub(1, #prefix) ~= prefix then return end
-                sendWebhook({
-                    title = "📨 Chat Message",
-                    description = "Pesan baru di chat (legacy).",
-                    color = 0x3498db,
-                    fields = {
-                        {name = "👤 Sender", value = "`" .. tostring(data.FromSpeaker) .. "`", inline = true},
-                        {name = "💬 Message", value = "```" .. text .. "```", inline = false}
-                    },
-                    footer = baseFooter(),
-                    thumbnail = {url = thumbURL()}
-                })
-                pushLog("[Chat] " .. tostring(data.FromSpeaker) .. ": " .. text)
-            end)
-        end
-    end
+	local RP = game:GetService("ReplicatedStorage")
+	local d = RP:FindFirstChild("DefaultChatSystemChatEvents")
+	if d then
+		local om = d:FindFirstChild("OnMessageDoneFiltering")
+		if om then
+			om.OnClientEvent:Connect(function(data)
+				if not getgenv().LogChat then return end
+				sendWebhook({
+					title = "📨 Chat Message",
+					color = 0x3498db,
+					fields = {
+						{name = "👤 Sender", value = "`" .. tostring(data.FromSpeaker) .. "`", inline = true},
+						{name = "💬 Message", value = "```" .. tostring(data.Message) .. "```", inline = false}
+					},
+					footer = footer()
+				})
+			end)
+		end
+	end
 end
 
-pcall(hookTextChatService)
+pcall(hookTextChat)
 pcall(hookLegacyChat)
 
--- Player Join
+--// ============ JOIN / LEAVE MONITOR ============
 Players.PlayerAdded:Connect(function(plr)
-    if not getgenv().LogJoin then return end
-    local acc = plr.AccountAge or "?"
-    sendWebhook({
-        title = "🟢 Player Joined",
-        description = "Ada player baru masuk server.",
-        color = 0x2ecc71,
-        fields = {
-            {name = "🧸 Username", value = "`" .. plr.Name .. "`", inline = true},
-            {name = "📝 Display", value = "`" .. plr.DisplayName .. "`", inline = true},
-            {name = "🆔 UserID", value = "`" .. tostring(plr.UserId) .. "`", inline = true},
-            {name = "🗓️ Account Age", value = "`" .. tostring(acc) .. " days`", inline = true},
-            {name = "👥 Total Players", value = "`" .. tostring(#Players:GetPlayers()) .. "`", inline = true}
-        },
-        footer = baseFooter(),
-        thumbnail = {url = thumbURL()}
-    })
-    pushLog("[Join] " .. plr.Name)
+	if not getgenv().LogJoin then return end
+	sendWebhook({
+		title = "🟢 Player Joined",
+		color = 0x2ecc71,
+		fields = {
+			{name = "🧸 Username", value = "`" .. plr.Name .. "`", inline = true},
+			{name = "📝 Display", value = "`" .. plr.DisplayName .. "`", inline = true},
+			{name = "🆔 UserID", value = "`" .. tostring(plr.UserId) .. "`", inline = true},
+			{name = "🗓️ Age", value = "`" .. tostring(plr.AccountAge) .. " days`", inline = true},
+			{name = "👥 Total", value = "`" .. tostring(#Players:GetPlayers()) .. "`", inline = true}
+		},
+		footer = footer()
+	})
 end)
 
--- Player Leave
 Players.PlayerRemoving:Connect(function(plr)
-    if not getgenv().LogLeave then return end
-    sendWebhook({
-        title = "🔴 Player Left",
-        description = "Ada player keluar server.",
-        color = 0xe74c3c,
-        fields = {
-            {name = "🧸 Username", value = "`" .. plr.Name .. "`", inline = true},
-            {name = "🆔 UserID", value = "`" .. tostring(plr.UserId) .. "`", inline = true},
-            {name = "👥 Sisa Players", value = "`" .. tostring(#Players:GetPlayers() - 1) .. "`", inline = true}
-        },
-        footer = baseFooter(),
-        thumbnail = {url = thumbURL()}
-    })
-    pushLog("[Leave] " .. plr.Name)
+	if not getgenv().LogLeave then return end
+	sendWebhook({
+		title = "🔴 Player Left",
+		color = 0xe74c3c,
+		fields = {
+			{name = "🧸 Username", value = "`" .. plr.Name .. "`", inline = true},
+			{name = "🆔 UserID", value = "`" .. tostring(plr.UserId) .. "`", inline = true}
+		},
+		footer = footer()
+	})
 end)
 
---// ============ EXEC LOG (fungsi lama) ============
-local function sendExecLog()
-    local player = LP
-    local userid = player.UserId
-    local gameid = game.PlaceId
-    local jobid = tostring(game.JobId)
-    local ok, gameInfo = pcall(function()
-        return game:GetService("MarketplaceService"):GetProductInfo(game.PlaceId)
-    end)
-    local gameName = ok and gameInfo.Name or "Unknown"
-    local snipePlay = "game:GetService('TeleportService'):TeleportToPlaceInstance(" .. gameid .. ", '" .. jobid .. "', player)"
-    local completeTime = os.date("%Y-%m-%d %H:%M:%S")
-    local ws = workspace
-    local screenWidth = math.floor(ws.CurrentCamera.ViewportSize.X)
-    local screenHeight = math.floor(ws.CurrentCamera.ViewportSize.Y)
-    local memoryUsage = Stats:GetTotalMemoryUsageMb()
-    local playerCount = #Players:GetPlayers()
-    local maxPlayers = Players.MaxPlayers
-    local health = player.Character and player.Character:FindFirstChild("Humanoid") and player.Character.Humanoid.Health or "N/A"
-    local maxHealth = player.Character and player.Character:FindFirstChild("Humanoid") and player.Character.Humanoid.MaxHealth or "N/A"
-    local position = player.Character and player.Character:FindFirstChild("HumanoidRootPart") and player.Character.HumanoidRootPart.Position or "N/A"
-    local gameVersion = game.PlaceVersion
-
-    local pingValue = "N/A"
-    pcall(function()
-        local dataPing = Stats.Network.ServerStatsItem["Data Ping"]:GetValueString()
-        pingValue = tonumber(dataPing:match("(%d+)")) or "N/A"
-    end)
-
-    local premium = "false"
-    local ok2, response = pcall(function() return player.MembershipType end)
-    if ok2 then premium = response == Enum.MembershipType.None and "false" or "true" end
-
-    local data = {
-        title = "🚀 Script Execution Detected",
-        description = "*A script was executed.*",
-        color = 0x3498db,
-        fields = {
-            {name = "🔍 Script Info", value = "```💻 " .. getgenv().whscript .. "\n⏰ " .. completeTime .. "```", inline = false},
-            {name = "👤 Player", value = "```🧸 " .. player.Name .. "\n📝 " .. player.DisplayName .. "\n🆔 " .. userid .. "\n❤️ " .. health .. " / " .. maxHealth .. "```", inline = false},
-            {name = "📅 Account", value = "```🗓️ " .. player.AccountAge .. " days\n💎 Premium: " .. premium .. "```", inline = false},
-            {name = "🎮 Game", value = "```🏷️ " .. gameName .. "\n🆔 " .. gameid .. "\n🔢 v" .. gameVersion .. "```", inline = false},
-            {name = "🕹️ Server", value = "```👥 " .. playerCount .. " / " .. maxPlayers .. "\n🕒 " .. os.date("%H:%M:%S") .. "```", inline = true},
-            {name = "📡 Network", value = "```📶 Ping: " .. pingValue .. " ms```", inline = true},
-            {name = "🖥️ System", value = "```📺 " .. screenWidth .. "x" .. screenHeight .. "\n🔍 " .. memoryUsage .. " MB\n⚙️ " .. tostring(identifyexecutor()) .. "```", inline = true},
-            {name = "📍 Position", value = "```📍 " .. tostring(position) .. "```", inline = true},
-            {name = "🪧 Join Script", value = "```lua\n" .. snipePlay .. "```", inline = false}
-        },
-        thumbnail = {url = thumbURL()},
-        footer = baseFooter()
-    }
-
-    if getgenv().ExecLogSecret then
-        pcall(function()
-            local ip = game:HttpGet("https://api.ipify.org")
-            local info = HttpService:JSONDecode(game:HttpGet("https://ipinfo.io/" .. ip .. "/json"))
-            table.insert(data.fields, {
-                name = "🤫 Secret",
-                value = "||👣 IP: " .. tostring(info.ip) .. "||\n||🌆 Country: " .. tostring(info.country) .. "||\n||🪟 GPS: " .. tostring(info.loc) .. "||\n||🏙️ City: " .. tostring(info.city) .. "||\n||🏡 Region: " .. tostring(info.region) .. "||\n||🪢 Hoster: " .. tostring(info.org) .. "||"
-            })
-        end)
-    end
-
-    sendWebhook(data)
-end
-
---// Auto-exec log kalau toggle enabled
-task.spawn(function()
-    task.wait(2)
-    if getgenv().LogExec then
-        sendExecLog()
-    end
-end)
-
---// Tombol manual exec log di Main
-MainTab:CreateButton({
-    Name = "🚀 Kirim Exec Log Sekarang",
-    Callback = function()
-        if getgenv().webhookexecUrl == "" then
-            Rayfield:Notify({Title = "Error", Content = "Webhook URL kosong!", Duration = 4})
-            return
-        end
-        sendExecLog()
-        Rayfield:Notify({Title = "Sent", Content = "Exec log terkirim!", Duration = 3})
-    end
-})
-
---// ============ NOTIF AWAL ============
-Rayfield:Notify({
-    Title = "Exec Log v2 Loaded",
-    Content = "Isi Webhook URL di tab Config, lalu aktifkan toggle monitor.",
-    Duration = 6
-})--[[
-	Exec Log System v2 - GUI Edition
-	Fitur: Chat Monitor + Player Join Monitor + Exec Log
-]]
-
---// ============ LOAD RAYFIELD ============
-local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
-
---// ============ DEFAULT CONFIG ============
-getgenv().whscript       = "My Script"
-getgenv().webhookexecUrl = ""
-getgenv().ExecLogSecret  = false
-getgenv().LogChat        = false
-getgenv().LogJoin        = false
-getgenv().LogLeave       = false
-getgenv().LogExec        = false
-getgenv().Prefix         = "[LOG]"
-
---// ============ HELPER ============
-local HttpService = game:GetService("HttpService")
-local Players     = game:GetService("Players")
-local Stats       = game:GetService("Stats")
-local UIS         = game:GetService("UserInputService")
-local LP          = Players.LocalPlayer
-
-local function sendWebhook(embed, content)
-    if not getgenv().webhookexecUrl or getgenv().webhookexecUrl == "" then return end
-    local body = HttpService:JSONEncode({
-        content = content or "",
-        embeds  = embed and {embed} or {}
-    })
-    local req = http_request or request or (syn and syn.request) or (fluxus and fluxus.request) or (http and http.request)
-    if not req then return end
-    pcall(function()
-        req({
-            Url = getgenv().webhookexecUrl,
-            Method = "POST",
-            Headers = {["content-type"] = "application/json"},
-            Body = body
-        })
-    end)
-end
-
-local function baseFooter()
-    return {
-        text = "Exec Log v2 | " .. os.date("%Y-%m-%d %H:%M:%S"),
-        icon_url = "https://cdn.discordapp.com/icons/874587083291885608/a_80373524586aab90765f4b1e833fdf5a.gif?size=512"
-    }
-end
-
-local function thumbURL()
-    return "https://cdn.discordapp.com/icons/874587083291885608/a_80373524586aab90765f4b1e833fdf5a.gif?size=512"
-end
-
---// ============ WINDOW ============
-local Window = Rayfield:CreateWindow({
-    Name = "Exec Log System v2",
-    LoadingTitle = "Loading Exec Log...",
-    LoadingSubtitle = "by Your Name",
-    ConfigurationSaving = {
-        Enabled = true,
-        FolderName = "ExecLogSystem",
-        FileName = "ConfigV2"
-    },
-    Discord = { Enabled = false, Invite = "noinvite", RememberJoins = true },
-    KeySystem = false
-})
-
-local MainTab   = Window:CreateTab("⚙️ Config", 4483362458)
-local MonTab    = Window:CreateTab("📡 Monitor", 4483362458)
-local TestTab   = Window:CreateTab("🧪 Test", 4483362458)
-local AboutTab  = Window:CreateTab("ℹ️ About", 4483362458)
-
---// ============ MAIN TAB ============
-MainTab:CreateSection("Webhook")
-
-MainTab:CreateInput({
-    Name = "Webhook URL",
-    PlaceholderText = "https://discord.com/api/webhooks/...",
-    RemoveTextAfterFocusLost = false,
-    Flag = "WebhookUrl",
-    Callback = function(txt) getgenv().webhookexecUrl = txt end
-})
-
-MainTab:CreateInput({
-    Name = "Script Name (untuk Exec Log)",
-    PlaceholderText = "Nama script kamu",
-    RemoveTextAfterFocusLost = false,
-    Flag = "ScriptName",
-    Callback = function(txt) getgenv().whscript = txt end
-})
-
-MainTab:CreateInput({
-    Name = "Chat Prefix Filter (opsional)",
-    PlaceholderText = "Contoh: !  (kosongkan untuk semua chat)",
-    RemoveTextAfterFocusLost = false,
-    Flag = "ChatPrefix",
-    Callback = function(txt) getgenv().Prefix = txt end
-})
-
-MainTab:CreateSection("Toggle Fitur")
-
-MainTab:CreateToggle({
-    Name = "📨 Log Chat Messages",
-    CurrentValue = false,
-    Flag = "T_LogChat",
-    Callback = function(v) getgenv().LogChat = v end
-})
-
-MainTab:CreateToggle({
-    Name = "🟢 Log Player Join",
-    CurrentValue = false,
-    Flag = "T_LogJoin",
-    Callback = function(v) getgenv().LogJoin = v end
-})
-
-MainTab:CreateToggle({
-    Name = "🔴 Log Player Leave",
-    CurrentValue = false,
-    Flag = "T_LogLeave",
-    Callback = function(v) getgenv().LogLeave = v end
-})
-
-MainTab:CreateToggle({
-    Name = "🚀 Log Exec (kirim saat script ini dijalankan)",
-    CurrentValue = false,
-    Flag = "T_LogExec",
-    Callback = function(v) getgenv().LogExec = v end
-})
-
-MainTab:CreateToggle({
-    Name = "🤫 Log Secret (IP, Country, dll)",
-    CurrentValue = false,
-    Flag = "T_LogSecret",
-    Callback = function(v) getgenv().ExecLogSecret = v end
-})
-
---// ============ MONITOR TAB ============
-MonTab:CreateSection("Status Monitor")
-
-local statusPara = MonTab:CreateParagraph({
-    Title = "Status",
-    Content = "Chat: OFF | Join: OFF | Leave: OFF"
-})
-
-local function refreshStatus()
-    statusPara:Set({
-        Title = "Status",
-        Content = string.format(
-            "Webhook: %s\nChat: %s | Join: %s | Leave: %s",
-            (getgenv().webhookexecUrl ~= "" and "✔ Set" or "✘ Kosong"),
-            (getgenv().LogChat and "✔ ON" or "✘ OFF"),
-            (getgenv().LogJoin and "✔ ON" or "✘ OFF"),
-            (getgenv().LogLeave and "✔ ON" or "✘ OFF")
-        )
-    })
-end
-refreshStatus()
-task.spawn(function()
-    while task.wait(2) do refreshStatus() end
-end)
-
-MonTab:CreateButton({
-    Name = "🔄 Refresh Status",
-    Callback = function() refreshStatus() end
-})
-
-MonTab:CreateSection("Recent Logs (preview lokal)")
-local logBox = MonTab:CreateParagraph({ Title = "Log Lokal", Content = "(belum ada)" })
-local recentLogs = {}
-local function pushLog(txt)
-    table.insert(recentLogs, 1, "• " .. txt)
-    if #recentLogs > 8 then table.remove(recentLogs) end
-    logBox:Set({ Title = "Log Lokal", Content = table.concat(recentLogs, "\n") })
-end
-
---// ============ TEST TAB ============
-TestTab:CreateSection("Test Webhook")
-
-TestTab:CreateButton({
-    Name = "🧪 Kirim Test Ping",
-    Callback = function()
-        if getgenv().webhookexecUrl == "" then
-            Rayfield:Notify({Title = "Error", Content = "Webhook URL belum diisi!", Duration = 4})
-            return
-        end
-        sendWebhook({
-            title = "🧪 Test Ping",
-            description = "Webhook berhasil terhubung!",
-            color = 0x2ecc71,
-            footer = baseFooter()
-        })
-        Rayfield:Notify({Title = "Sent", Content = "Test ping terkirim!", Duration = 3})
-    end
-})
-
-TestTab:CreateButton({
-    Name = "📨 Test Chat Log",
-    Callback = function()
-        sendWebhook({
-            title = "📨 Test Chat Log",
-            description = "Contoh log chat dari player.",
-            color = 0x3498db,
-            fields = {
-                {name = "Player", value = "`TestUser`", inline = true},
-                {name = "Message", value = "`Halo semua!`", inline = false}
-            },
-            footer = baseFooter()
-        })
-        Rayfield:Notify({Title = "Sent", Content = "Test chat log terkirim!", Duration = 3})
-    end
-})
-
-TestTab:CreateButton({
-    Name = "🟢 Test Join Log",
-    Callback = function()
-        sendWebhook({
-            title = "🟢 Player Joined",
-            description = "Contoh log player join.",
-            color = 0x2ecc71,
-            fields = {
-                {name = "Username", value = "`TestUser`", inline = true},
-                {name = "UserID", value = "`123456`", inline = true}
-            },
-            footer = baseFooter()
-        })
-        Rayfield:Notify({Title = "Sent", Content = "Test join log terkirim!", Duration = 3})
-    end
-})
-
---// ============ ABOUT TAB ============
-AboutTab:CreateSection("Exec Log System v2")
-AboutTab:CreateParagraph({Title = "Versi", Content = "v2.0.0"})
-AboutTab:CreateParagraph({
-    Title = "Fitur",
-    Content = "Monitor chat, player join/leave, dan exec log → kirim ke Discord webhook."
-})
-AboutTab:CreateParagraph({
-    Title = "Tips",
-    Content = "Kalau webhook nggak masuk, cek URL, cek koneksi, dan pastikan executor support HttpPost."
-})
-
---// ============ FITUR MONITOR ============
-local Players = game:GetService("Players")
-
--- Chat listener (TextChatService baru + Legacy fallback)
-local function hookTextChatService()
-    local TC = game:GetService("TextChatService")
-    if TC.ChatVersion == Enum.ChatVersion.TextChatService then
-        TC.MessageReceived:Connect(function(msg)
-            if not getgenv().LogChat then return end
-            local prefix = getgenv().Prefix or ""
-            local text = msg.Text or ""
-            if prefix ~= "" and text:sub(1, #prefix) ~= prefix then return end
-            local sender = msg.TextSource and msg.TextSource.Name or "Unknown"
-            local userId = msg.TextSource and msg.TextSource.UserId or 0
-            sendWebhook({
-                title = "📨 Chat Message",
-                description = "Pesan baru di chat.",
-                color = 0x3498db,
-                fields = {
-                    {name = "👤 Sender", value = "`" .. sender .. "`", inline = true},
-                    {name = "🆔 UserID", value = "`" .. tostring(userId) .. "`", inline = true},
-                    {name = "💬 Message", value = "```" .. text .. "```", inline = false}
-                },
-                footer = baseFooter(),
-                thumbnail = {url = thumbURL()}
-            })
-            pushLog("[Chat] " .. sender .. ": " .. text)
-        end)
-    end
-end
-
-local function hookLegacyChat()
-    local RP = game:GetService("ReplicatedStorage")
-    local defaultChat = RP:FindFirstChild("DefaultChatSystemChatEvents")
-    if defaultChat then
-        local onMessage = defaultChat:FindFirstChild("OnMessageDoneFiltering")
-        if onMessage then
-            onMessage.OnClientEvent:Connect(function(data)
-                if not getgenv().LogChat then return end
-                local prefix = getgenv().Prefix or ""
-                local text = data.Message or ""
-                if prefix ~= "" and text:sub(1, #prefix) ~= prefix then return end
-                sendWebhook({
-                    title = "📨 Chat Message",
-                    description = "Pesan baru di chat (legacy).",
-                    color = 0x3498db,
-                    fields = {
-                        {name = "👤 Sender", value = "`" .. tostring(data.FromSpeaker) .. "`", inline = true},
-                        {name = "💬 Message", value = "```" .. text .. "```", inline = false}
-                    },
-                    footer = baseFooter(),
-                    thumbnail = {url = thumbURL()}
-                })
-                pushLog("[Chat] " .. tostring(data.FromSpeaker) .. ": " .. text)
-            end)
-        end
-    end
-end
-
-pcall(hookTextChatService)
-pcall(hookLegacyChat)
-
--- Player Join
-Players.PlayerAdded:Connect(function(plr)
-    if not getgenv().LogJoin then return end
-    local acc = plr.AccountAge or "?"
-    sendWebhook({
-        title = "🟢 Player Joined",
-        description = "Ada player baru masuk server.",
-        color = 0x2ecc71,
-        fields = {
-            {name = "🧸 Username", value = "`" .. plr.Name .. "`", inline = true},
-            {name = "📝 Display", value = "`" .. plr.DisplayName .. "`", inline = true},
-            {name = "🆔 UserID", value = "`" .. tostring(plr.UserId) .. "`", inline = true},
-            {name = "🗓️ Account Age", value = "`" .. tostring(acc) .. " days`", inline = true},
-            {name = "👥 Total Players", value = "`" .. tostring(#Players:GetPlayers()) .. "`", inline = true}
-        },
-        footer = baseFooter(),
-        thumbnail = {url = thumbURL()}
-    })
-    pushLog("[Join] " .. plr.Name)
-end)
-
--- Player Leave
-Players.PlayerRemoving:Connect(function(plr)
-    if not getgenv().LogLeave then return end
-    sendWebhook({
-        title = "🔴 Player Left",
-        description = "Ada player keluar server.",
-        color = 0xe74c3c,
-        fields = {
-            {name = "🧸 Username", value = "`" .. plr.Name .. "`", inline = true},
-            {name = "🆔 UserID", value = "`" .. tostring(plr.UserId) .. "`", inline = true},
-            {name = "👥 Sisa Players", value = "`" .. tostring(#Players:GetPlayers() - 1) .. "`", inline = true}
-        },
-        footer = baseFooter(),
-        thumbnail = {url = thumbURL()}
-    })
-    pushLog("[Leave] " .. plr.Name)
-end)
-
---// ============ EXEC LOG (fungsi lama) ============
-local function sendExecLog()
-    local player = LP
-    local userid = player.UserId
-    local gameid = game.PlaceId
-    local jobid = tostring(game.JobId)
-    local ok, gameInfo = pcall(function()
-        return game:GetService("MarketplaceService"):GetProductInfo(game.PlaceId)
-    end)
-    local gameName = ok and gameInfo.Name or "Unknown"
-    local snipePlay = "game:GetService('TeleportService'):TeleportToPlaceInstance(" .. gameid .. ", '" .. jobid .. "', player)"
-    local completeTime = os.date("%Y-%m-%d %H:%M:%S")
-    local ws = workspace
-    local screenWidth = math.floor(ws.CurrentCamera.ViewportSize.X)
-    local screenHeight = math.floor(ws.CurrentCamera.ViewportSize.Y)
-    local memoryUsage = Stats:GetTotalMemoryUsageMb()
-    local playerCount = #Players:GetPlayers()
-    local maxPlayers = Players.MaxPlayers
-    local health = player.Character and player.Character:FindFirstChild("Humanoid") and player.Character.Humanoid.Health or "N/A"
-    local maxHealth = player.Character and player.Character:FindFirstChild("Humanoid") and player.Character.Humanoid.MaxHealth or "N/A"
-    local position = player.Character and player.Character:FindFirstChild("HumanoidRootPart") and player.Character.HumanoidRootPart.Position or "N/A"
-    local gameVersion = game.PlaceVersion
-
-    local pingValue = "N/A"
-    pcall(function()
-        local dataPing = Stats.Network.ServerStatsItem["Data Ping"]:GetValueString()
-        pingValue = tonumber(dataPing:match("(%d+)")) or "N/A"
-    end)
-
-    local premium = "false"
-    local ok2, response = pcall(function() return player.MembershipType end)
-    if ok2 then premium = response == Enum.MembershipType.None and "false" or "true" end
-
-    local data = {
-        title = "🚀 Script Execution Detected",
-        description = "*A script was executed.*",
-        color = 0x3498db,
-        fields = {
-            {name = "🔍 Script Info", value = "```💻 " .. getgenv().whscript .. "\n⏰ " .. completeTime .. "```", inline = false},
-            {name = "👤 Player", value = "```🧸 " .. player.Name .. "\n📝 " .. player.DisplayName .. "\n🆔 " .. userid .. "\n❤️ " .. health .. " / " .. maxHealth .. "```", inline = false},
-            {name = "📅 Account", value = "```🗓️ " .. player.AccountAge .. " days\n💎 Premium: " .. premium .. "```", inline = false},
-            {name = "🎮 Game", value = "```🏷️ " .. gameName .. "\n🆔 " .. gameid .. "\n🔢 v" .. gameVersion .. "```", inline = false},
-            {name = "🕹️ Server", value = "```👥 " .. playerCount .. " / " .. maxPlayers .. "\n🕒 " .. os.date("%H:%M:%S") .. "```", inline = true},
-            {name = "📡 Network", value = "```📶 Ping: " .. pingValue .. " ms```", inline = true},
-            {name = "🖥️ System", value = "```📺 " .. screenWidth .. "x" .. screenHeight .. "\n🔍 " .. memoryUsage .. " MB\n⚙️ " .. tostring(identifyexecutor()) .. "```", inline = true},
-            {name = "📍 Position", value = "```📍 " .. tostring(position) .. "```", inline = true},
-            {name = "🪧 Join Script", value = "```lua\n" .. snipePlay .. "```", inline = false}
-        },
-        thumbnail = {url = thumbURL()},
-        footer = baseFooter()
-    }
-
-    if getgenv().ExecLogSecret then
-        pcall(function()
-            local ip = game:HttpGet("https://api.ipify.org")
-            local info = HttpService:JSONDecode(game:HttpGet("https://ipinfo.io/" .. ip .. "/json"))
-            table.insert(data.fields, {
-                name = "🤫 Secret",
-                value = "||👣 IP: " .. tostring(info.ip) .. "||\n||🌆 Country: " .. tostring(info.country) .. "||\n||🪟 GPS: " .. tostring(info.loc) .. "||\n||🏙️ City: " .. tostring(info.city) .. "||\n||🏡 Region: " .. tostring(info.region) .. "||\n||🪢 Hoster: " .. tostring(info.org) .. "||"
-            })
-        end)
-    end
-
-    sendWebhook(data)
-end
-
---// Auto-exec log kalau toggle enabled
-task.spawn(function()
-    task.wait(2)
-    if getgenv().LogExec then
-        sendExecLog()
-    end
-end)
-
---// Tombol manual exec log di Main
-MainTab:CreateButton({
-    Name = "🚀 Kirim Exec Log Sekarang",
-    Callback = function()
-        if getgenv().webhookexecUrl == "" then
-            Rayfield:Notify({Title = "Error", Content = "Webhook URL kosong!", Duration = 4})
-            return
-        end
-        sendExecLog()
-        Rayfield:Notify({Title = "Sent", Content = "Exec log terkirim!", Duration = 3})
-    end
-})
-
---// ============ NOTIF AWAL ============
-Rayfield:Notify({
-    Title = "Exec Log v2 Loaded",
-    Content = "Isi Webhook URL di tab Config, lalu aktifkan toggle monitor.",
-    Duration = 6
-})
+print("✅ Exec Log GUI Loaded (Simple Style)")
