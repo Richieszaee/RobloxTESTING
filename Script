@@ -1,149 +1,105 @@
---[[
-    RICHIE OMEGA V12.1 — STEAL EGG EDITION
-    ───────────────────────────────────────────
-    Target:    Steal An Egg
-    God Mode:  Health Lock + No Stun
-    Auto Steal: Tween Walk + FieldEggCarry Remote
-    UI:        Obsidian Style
-    ───────────────────────────────────────────
-]]
+local LP = game.Players.LocalPlayer
+local RS = game:GetService("ReplicatedStorage")
 
--- ============================================================
--- LOAD LIBRARIES
--- ============================================================
-local obsidianRepo = 'https://raw.githubusercontent.com/deividcomsono/Obsidian/main/'
-local Library      = loadstring(game:HttpGet(obsidianRepo .. 'Library.lua'))()
-local ThemeManager = loadstring(game:HttpGet(obsidianRepo .. 'addons/ThemeManager.lua'))()
+-- GUI
+local g = Instance.new("ScreenGui", LP.PlayerGui)
+g.ResetOnSpawn = false
+g.Name = "EventTracker"
 
--- ============================================================
--- SERVICES & CONSTANTS
--- ============================================================
-local Players           = game:GetService('Players')
-local RunService        = game:GetService('RunService')
-local TweenService      = game:GetService('TweenService')
-local ReplicatedStorage = game:GetService('ReplicatedStorage')
+local Main = Instance.new("Frame", g)
+Main.Size = UDim2.new(0,220,0,130)
+Main.Position = UDim2.new(0,10,0,10)
+Main.BackgroundColor3 = Color3.fromRGB(12,12,12)
+Main.BackgroundTransparency = 0.1
+Main.Active = true
+Main.Draggable = true -- bisa di geser
+Instance.new("UICorner", Main)
 
-local LocalPlayer = Players.LocalPlayer
-local Camera      = workspace.CurrentCamera
+local title = Instance.new("TextLabel", Main)
+title.Size = UDim2.new(1,-50,0,20)
+title.Text = "NEXT EVENT TRACKER"
+title.TextColor3 = Color3.fromRGB(0,255,255)
+title.BackgroundTransparency = 1
+title.Font = Enum.Font.GothamBold
+title.TextXAlignment = Enum.TextXAlignment.Left
+title.Position = UDim2.new(0,8,0,0)
 
--- REMOTE BARU SESUAI SS LU
-local Networking = ReplicatedStorage:WaitForChild("Packages"):WaitForChild("Networking")
-local TakeEgg = Networking:WaitForChild("RE"):WaitForChild("EggWorld"):WaitForChild("FieldEggCarry")
+-- TOMBOL MINIMIZE
+local mini = Instance.new("TextButton", Main)
+mini.Size = UDim2.new(0,20,0,20)
+mini.Position = UDim2.new(1,-45,0,2)
+mini.Text = "-"
+mini.BackgroundColor3 = Color3.fromRGB(255,170,0)
+Instance.new("UICorner", mini)
 
--- ============================================================
--- STATE
--- ============================================================
-local State = {
-    GodMode       = true,
-    NoStun        = true,
-    SpeedHack     = false,
-    WalkSpeed     = 28,
-    AutoSteal     = false,
-    TweenSpeed    = 70, -- kecepatan jalan. 40-70 aman dari guard
-}
+-- TOMBOL CLOSE
+local close = Instance.new("TextButton", Main)
+close.Size = UDim2.new(0,20,0,20)
+close.Position = UDim2.new(1,-22,0,2)
+close.Text = "X"
+close.BackgroundColor3 = Color3.fromRGB(200,50,50)
+Instance.new("UICorner", close)
 
-local CurrentTween = nil
-local GodLoop
+local eventLabel = Instance.new("TextLabel", Main)
+eventLabel.Size = UDim2.new(1,-10,0,40)
+eventLabel.Position = UDim2.new(0,5,0,25)
+eventLabel.Text = "Scanning..."
+eventLabel.TextColor3 = Color3.new(1,1,1)
+eventLabel.BackgroundTransparency = 1
+eventLabel.TextWrapped = true
 
--- ============================================================
--- GOD MODE & NO STUN
--- ============================================================
-GodLoop = RunService.Heartbeat:Connect(function()
-    if not State.GodMode then return end
-    
-    local char = LocalPlayer.Character
-    local hum = char and char:FindFirstChildOfClass("Humanoid")
-    
-    if hum then
-        if hum.Health < hum.MaxHealth then
-            hum.Health = hum.MaxHealth
-        end
-        
-        if State.NoStun then
-            hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
-            hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
-            if hum:GetState() == Enum.HumanoidStateType.FallingDown or hum:GetState() == Enum.HumanoidStateType.Ragdoll then
-                hum:ChangeState(Enum.HumanoidStateType.GettingUp)
-            end
-        end
+local timeLabel = Instance.new("TextLabel", Main)
+timeLabel.Size = UDim2.new(1,-10,0,20)
+timeLabel.Position = UDim2.new(0,5,0,65)
+timeLabel.Text = "Time: --"
+timeLabel.TextColor3 = Color3.fromRGB(255,255,0)
+timeLabel.BackgroundTransparency = 1
 
-        if State.SpeedHack then
-            hum.WalkSpeed = State.WalkSpeed
-        end
-    end
+local btn = Instance.new("TextButton", Main)
+btn.Size = UDim2.new(1,-10,0,20)
+btn.Position = UDim2.new(0,5,0,90)
+btn.Text = "REFRESH"
+btn.BackgroundColor3 = Color3.fromRGB(0,170,200)
+Instance.new("UICorner", btn)
+
+-- FUNCTION CLOSE
+close.MouseButton1Click:Connect(function() 
+	g:Destroy() -- hapus total
 end)
 
--- ============================================================
--- TWEEN WALK FUNCTION
--- ============================================================
-local function WalkTo(pos)
-	if CurrentTween then CurrentTween:Cancel() end
-	local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-	if not hrp then return end
-	local dist = (hrp.Position - pos).Magnitude
-	local time = dist / State.TweenSpeed
-	CurrentTween = TweenService:Create(hrp, TweenInfo.new(time, Enum.EasingStyle.Linear), {CFrame = CFrame.new(pos + Vector3.new(0,3,0))})
-	CurrentTween:Play()
-end
-
--- ============================================================
--- AUTO STEAL LOGIC
--- ============================================================
-task.spawn(function()
-	while task.wait(0.5) do
-		if State.AutoSteal then
-			local objects = workspace:FindFirstChild("__OBJECTS")
-			if objects then
-				for _,obj in pairs(objects:GetChildren()) do
-					if obj.Name:lower():find("egg") and obj:FindFirstChild("HumanoidRootPart") then
-						local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-						if hrp then
-							local dist = (hrp.Position - obj.HumanoidRootPart.Position).Magnitude
-							if dist < 200 then -- cuma ambil yg deket
-								WalkTo(obj.HumanoidRootPart.Position)
-								task.wait(0.6)
-								pcall(function() TakeEgg:FireServer(obj) end) -- STEAL
-								task.wait(0.2)
-							end
-						end
-					end
-				end
-			end
-		end
+-- FUNCTION MINIMIZE
+local minimized = false
+mini.MouseButton1Click:Connect(function()
+	minimized = not minimized
+	if minimized then
+		Main.Size = UDim2.new(0,220,0,25) -- kecilin
+		mini.Text = "+"
+		eventLabel.Visible = false
+		timeLabel.Visible = false
+		btn.Visible = false
+	else
+		Main.Size = UDim2.new(0,220,0,130) -- balikin
+		mini.Text = "-"
+		eventLabel.Visible = true
+		timeLabel.Visible = true
+		btn.Visible = true
 	end
 end)
 
--- ============================================================
--- UI CONSTRUCTION
--- ============================================================
-local Window = Library:CreateWindow({
-    Title    = 'RICHIE OMEGA - STEAL EGG',
-    Footer   = 'Universal God + Auto Steal',
-    Center   = true,
-    AutoShow = true,
-})
+-- FUNCTION SCAN EVENT
+local function ScanEvent()
+	eventLabel.Text = "Scanning..."
+	for _,v in pairs(RS:GetDescendants()) do
+		if v:IsA("StringValue") and v.Name:lower():find("event") then
+			eventLabel.Text = "Event: "..v.Value
+			if v.Parent:FindFirstChild("Time") then
+				timeLabel.Text = "Time: "..v.Parent.Time.Value
+			end
+			return
+		end
+	end
+	eventLabel.Text = "Event: Tidak ketemu"
+end
 
-local Tabs = {
-    Main    = Window:AddTab('God / Steal', 'shield'),
-    Config  = Window:AddTab('Settings',     'settings'),
-}
-
--- ── GOD / STEAL TAB ──
-local GodBox = Tabs.Main:AddLeftGroupbox('God Options')
-GodBox:AddToggle('GodMode', { Text = 'Enable God Mode', Default = true, Callback = function(v) State.GodMode = v end })
-GodBox:AddToggle('NoStun', { Text = 'No Stun / Anti-Trip', Default = true, Callback = function(v) State.NoStun = v end })
-GodBox:AddToggle('SpeedHack', { Text = 'God Speed', Default = false, Callback = function(v) State.SpeedHack = v end })
-GodBox:AddSlider('WalkSpeed', { Text = 'Speed Value', Default = 28, Min = 16, Max = 100, Callback = function(v) State.WalkSpeed = v end })
-
-local StealBox = Tabs.Main:AddRightGroupbox('Auto Steal')
-StealBox:AddToggle('AutoSteal', { Text = 'Auto Steal Egg', Default = false, Callback = function(v) State.AutoSteal = v end })
-StealBox:AddSlider('TweenSpeed', { Text = 'Walk Speed Tween', Default = 70, Min = 40, Max = 150, Callback = function(v) State.TweenSpeed = v end })
-StealBox:AddLabel("Tips: 40-70 = Aman dari Guard")
-
--- ── SETTINGS TAB ──
-local SettingsBox = Tabs.Config:AddLeftGroupbox('Menu Control')
-SettingsBox:AddLabel('Menu Keybind'):AddKeyPicker('MenuKeybind', { Default = 'RightShift', NoUI = true, Text = 'Menu Keybind' })
-SettingsBox:AddButton('Stop All Tween', function() if CurrentTween then CurrentTween:Cancel() end)
-SettingsBox:AddButton('Unload Script', function() GodLoop:Disconnect() Library:Unload() end)
-
-Library:Notify({ Title = 'RICHIE OMEGA LOADED', Description = 'Press RightShift to Hide GUI.', Time = 5 })
+btn.MouseButton1Click:Connect(ScanEvent)
+ScanEvent()
