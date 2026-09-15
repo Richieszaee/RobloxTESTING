@@ -1,151 +1,105 @@
 local LP = game.Players.LocalPlayer
-local WS = game:GetService("Workspace")
+local RS = game:GetService("ReplicatedStorage")
 local HttpService = game:GetService("HttpService")
 
--- PASTE WEBHOOK KAMU DISINI
-local WEBHOOK_URL = "https://discord.com/api/webhooks/123456789/abcdefghijklmnopqrstuvwxyz"
+-- GANTI PAKE WEBHOOK BARU KAMU
+local WEBHOOK_URL = "WEBHOOK_BARU_KAMU"
 
 -- GUI
-local g = Instance.new("ScreenGui", LP.PlayerGui)
-g.ResetOnSpawn = false
-g.Name = "EggWebhook"
+local g = Instance.new("ScreenGui", LP.PlayerGui) g.ResetOnSpawn = false
+local Main = Instance.new("Frame", g) Main.Size = UDim2.new(0,260,0,150) Main.Position = UDim2.new(0,10,0,10) Main.BackgroundColor3 = Color3.fromRGB(18,18,18) Main.Active = true Main.Draggable = true Instance.new("UICorner", Main)
+Instance.new("TextLabel", Main).Size = UDim2.new(1,-25,0,22) Instance.new("TextLabel", Main).Position = UDim2.new(0,8,0,2) Instance.new("TextLabel", Main).Text = "SAE RARITY DETECTOR" Instance.new("TextLabel", Main).TextColor3 = Color3.fromRGB(114,137,218) Instance.new("TextLabel", Main).BackgroundTransparency = 1
+local close = Instance.new("TextButton", Main) close.Size = UDim2.new(0,20,0,20) close.Position = UDim2.new(1,-22,0,2) close.Text = "X" close.BackgroundColor3 = Color3.fromRGB(200,50,50) Instance.new("UICorner", close) close.MouseButton1Click:Connect(function() g:Destroy() end)
 
-local Main = Instance.new("Frame", g)
-Main.Size = UDim2.new(0,250,0,140)
-Main.Position = UDim2.new(0,10,0,10)
-Main.BackgroundColor3 = Color3.fromRGB(18,18,18)
-Main.Active = true Main.Draggable = true
-Instance.new("UICorner", Main)
+local status = Instance.new("TextLabel", Main) status.Size = UDim2.new(1,-10,0,20) status.Position = UDim2.new(0,5,0,28) status.Text = "Status: Monitoring..." status.BackgroundTransparency = 1
+local last = Instance.new("TextLabel", Main) last.Size = UDim2.new(1,-10,0,20) last.Position = UDim2.new(0,5,0,48) last.Text = "Last: -" last.TextColor3 = Color3.fromRGB(255,215,0) last.BackgroundTransparency = 1
+local timer = Instance.new("TextLabel", Main) timer.Size = UDim2.new(1,-10,0,20) timer.Position = UDim2.new(0,5,0,68) timer.Text = "Check: 3s" timer.TextColor3 = Color3.fromRGB(0,255,0) timer.BackgroundTransparency = 1
 
-local title = Instance.new("TextLabel", Main)
-title.Size = UDim2.new(1,-25,0,22)
-title.Position = UDim2.new(0,8,0,2)
-title.Text = "SAE WEBHOOK SCANNER"
-title.TextColor3 = Color3.fromRGB(114,137,218) -- warna discord
-title.BackgroundTransparency = 1
-title.Font = Enum.Font.GothamBold
-
-local close = Instance.new("TextButton", Main)
-close.Size = UDim2.new(0,20,0,20)
-close.Position = UDim2.new(1,-22,0,2)
-close.Text = "X"
-close.BackgroundColor3 = Color3.fromRGB(200,50,50)
-Instance.new("UICorner", close)
-close.MouseButton1Click:Connect(function() g:Destroy() end)
-
-local status = Instance.new("TextLabel", Main)
-status.Size = UDim2.new(1,-10,0,20)
-status.Position = UDim2.new(0,5,0,28)
-status.Text = "Status: Menunggu..."
-status.TextColor3 = Color3.new(1,1,1)
-status.BackgroundTransparency = 1
-status.Font = Enum.Font.Gotham
-
-local last = Instance.new("TextLabel", Main)
-last.Size = UDim2.new(1,-10,0,20)
-last.Position = UDim2.new(0,5,0,48)
-last.Text = "Rare Terakhir: -"
-last.TextColor3 = Color3.fromRGB(255,215,0)
-last.BackgroundTransparency = 1
-
-local scanCount = Instance.new("TextLabel", Main)
-scanCount.Size = UDim2.new(1,-10,0,20)
-scanCount.Position = UDim2.new(0,5,0,68)
-scanCount.Text = "Scan ke: 0"
-scanCount.TextColor3 = Color3.fromRGB(150,150,150)
-scanCount.BackgroundTransparency = 1
-
-local timer = Instance.new("TextLabel", Main)
-timer.Size = UDim2.new(1,-10,0,20)
-timer.Position = UDim2.new(0,5,0,88)
-timer.Text = "Scan berikutnya: 5s"
-timer.TextColor3 = Color3.fromRGB(0,255,0)
-timer.BackgroundTransparency = 1
-
--- LIST TELUR LANGKA
-local RareEggs = {
-	["Divine Egg"]=true, ["Eternal Egg"]=true, ["Prehistoric Egg"]=true,
-	["Mythic Egg"]=true, ["Legendary Egg"]=true, ["Celestial Egg"]=true
+-- LIST RARITY TERTINGGI DARI CONFIG
+local RareList = {
+	["Eternal"] = true, -- 1 in 100,000,000
+	["Divine"] = true,
+	["Mythic"] = true,
+	["Legendary"] = true,
+	["Prehistoric"] = true,
+	["Celestial"] = true
 }
 
 local sent = {}
-local count = 0
 
--- KIRIM KE WEBHOOK
-local function SendToWebhook(egg, pos)
-	if WEBHOOK_URL == "PASTE_WEBHOOK_DISCORD_KAMU_DISINI" then
-		warn("Ganti dulu WEBHOOK_URL nya!")
-		return
-	end
-	
-	local data = {
-	["username"] = "SAE Egg Predictor",
-	["avatar_url"] = "https://i.imgur.com/egg.png",
-	["content"] = "@everyone",
-		["embeds"] = {{
-			["title"] = "👑 TELUR LANGKA MUNCUL!",
-			["description"] = "**"..egg.."** telah spawn di server!",
-			["color"] = 16766720,
-			["fields"] = {
-				{["name"] = "📍 Lokasi", ["value"] = tostring(pos), ["inline"] = true},
-				{["name"] = "⏰ Waktu", ["value"] = os.date("%H:%M:%S"), ["inline"] = true}
-			},
-			["footer"] = {["text"] = "Steal An Egg Predictor"}
-	}}
-	}
+local function SendWebhook(rarity, data)
+	if WEBHOOK_URL == "WEBHOOK_BARU_KAMU" then status.Text = "Error: Isi webhook dulu" return end
 	
 	pcall(function()
-		request({ -- ganti ke http_request kalo pake executor lain
+		syn.request({
 			Url = WEBHOOK_URL,
 			Method = "POST",
 			Headers = {["Content-Type"] = "application/json"},
-			Body = HttpService:JSONEncode(data)
+			Body = HttpService:JSONEncode({
+				content = "@everyone",
+				embeds = {{
+					title = "👑 "..rarity.." EGG DETECTED!",
+					description = "**"..data.DisplayName.."** rarity spawned!",
+					color = 16711935,
+					fields = {
+						{name = "Rate", value = data.DefaultRarityValue, inline = true},
+						{name = "Time", value = os.date("%H:%M:%S"), inline = true}
+					},
+					footer = {text = "SAE Predictor"}
+				}}
+			})
 	})
+	end)
+	pcall(function()
+		http_request({
+			Url = WEBHOOK_URL,
+			Method = "POST",
+			Headers = {["Content-Type"] = "application/json"},
+			Body = HttpService:JSONEncode({
+				content = "@everyone",
+				embeds = {{
+					title = "👑 "..rarity.." EGG DETECTED!",
+					description = "**"..data.DisplayName.."** rarity spawned!",
+					color = 16711935,
+					fields = {
+						{name = "Rate", value = data.DefaultRarityValue, inline = true},
+						{name = "Time", value = os.date("%H:%M:%S"), inline = true}
+					}
+				}}
+			})
+		})
 	end)
 end
 
--- SCAN 1 NEST TIAP 5 DETIK
-local function Scan()
-	count = count + 1
-	scanCount.Text = "Scan ke: "..count
-	
-	local nests = {}
-	for _,v in pairs(WS:GetDescendants()) do
-		if v.Name:lower():find("nest") then
-			table.insert(nests, v)
-		end
-	end
-	
-	if #nests == 0 then status.Text = "Status: Nest tidak ketemu" return end
-	
-	local index = (count % #nests) + 1
-	local nest = nests[index]
-	status.Text = "Status: Scan nest "..index.."/"..#nests
-	
-	local eggVal = nest:FindFirstChild("EggName") or nest:FindFirstChild("NameValue")
-	if eggVal and eggVal.Value ~= "" then
-		local name = eggVal.Value
-		if RareEggs[name] then
-			local key = name..tostring(nest)
-			if not sent[key] then
-				sent[key] = true
-				last.Text = "Rare Terakhir: "..name
-				SendToWebhook(name, nest.Position)
-			end
-		end
-	end
-end
-
--- LOOP 5 DETIK
+-- LOOP CEK CONFIG
 task.spawn(function()
-	local cd = 5
+	local cd = 3
 	while g.Parent do
 		task.wait(1)
 		cd = cd - 1
-		timer.Text = "Scan berikutnya: "..cd.."s"
+		timer.Text = "Check: "..cd.."s"
+		
 		if cd <= 0 then
-			cd = 5
-			Scan()
+			cd = 3
+			local configs = RS:WaitForChild("Data"):WaitForChild("Rarity"):WaitForChild("Configs")
+			
+			for rarityName, _ in pairs(RareList) do
+				local config = configs:FindFirstChild(rarityName)
+				if config then
+					local data = require(config)
+					if not sent[rarityName] then -- biar ga spam
+						sent[rarityName] = true
+						last.Text = "Last: "..rarityName
+						status.Text = "FOUND: "..rarityName
+						SendWebhook(rarityName, data)
+						task.wait(10) -- cooldown 10 detik biar ga spam webhook
+						sent[rarityName] = nil -- reset biar bisa detect lagi nanti
+					end
+				end
+			end
+			if status.Text == "FOUND: "..last.Text then
+				status.Text = "Status: Monitoring..."
+			end
 		end
 	end
 end)
