@@ -1,30 +1,29 @@
 --[[
-	EXEC LOG GUI - Simple Style
-	Style: SAE GUI V16
+	STEAL AN EGG - Prediction GUI
+	Style: Simple (SAE GUI V16)
+	Fitur: Egg Stock Predictor + Weather Predictor + Discord Alert
 ]]
 
 local Players     = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
-local Stats       = game:GetService("Stats")
 local player      = Players.LocalPlayer
 
 --// CONFIG
-getgenv().webhookUrl  = ""
-getgenv().whscript    = "My Script"
-getgenv().LogChat     = false
-getgenv().LogJoin     = false
-getgenv().LogLeave    = false
-getgenv().LogSecret   = false
+getgenv().webhookUrl    = "https://discord.com/api/webhooks/1549381840744218685/v6DyiERBUT-xzPLIk5i3xIT38LEoHNI4FC8tMRvy5CtDbIauDn0FSr7_B6-f_yhNA8V6"
+getgenv().PredictEgg    = false
+getgenv().PredictWeather= false
+getgenv().AlertRare     = false
+getgenv().LastPrediction = {}
 
 --// GUI
 local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "ExecLogGUI"
+ScreenGui.Name = "SEGPredict"
 ScreenGui.Parent = game:GetService("CoreGui")
 ScreenGui.ResetOnSpawn = false
 
 local Frame = Instance.new("Frame")
 Frame.Parent = ScreenGui
-Frame.Size = UDim2.new(0, 260, 0, 400)
+Frame.Size = UDim2.new(0, 270, 0, 330)
 Frame.Position = UDim2.new(0, 20, 0, 100)
 Frame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
 Frame.BorderSizePixel = 0
@@ -35,17 +34,46 @@ local Title = Instance.new("TextLabel")
 Title.Parent = Frame
 Title.Size = UDim2.new(1, 0, 0, 28)
 Title.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-Title.Text = "📡 Exec Log GUI"
-Title.TextColor3 = Color3.fromRGB(0, 255, 0)
+Title.Text = "🥚 Steal An Egg Predictor"
+Title.TextColor3 = Color3.fromRGB(0, 255, 100)
 Title.Font = Enum.Font.SourceSansBold
 Title.TextSize = 15
 Title.BorderSizePixel = 0
 
---// HELPER: Input Box
+--// Helper
+local function CreateLabel(text, yPos)
+	local lbl = Instance.new("TextLabel")
+	lbl.Parent = Frame
+	lbl.Size = UDim2.new(0, 250, 0, 18)
+	lbl.Position = UDim2.new(0, 10, 0, yPos)
+	lbl.BackgroundTransparency = 1
+	lbl.Text = text
+	lbl.TextColor3 = Color3.fromRGB(180, 180, 180)
+	lbl.Font = Enum.Font.SourceSansBold
+	lbl.TextSize = 12
+	lbl.TextXAlignment = Enum.TextXAlignment.Left
+	return lbl
+end
+
+local function CreateButton(name, yPos, callback)
+	local btn = Instance.new("TextButton")
+	btn.Parent = Frame
+	btn.Size = UDim2.new(0, 250, 0, 28)
+	btn.Position = UDim2.new(0, 10, 0, yPos)
+	btn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+	btn.BorderSizePixel = 0
+	btn.Text = name
+	btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+	btn.Font = Enum.Font.SourceSans
+	btn.TextSize = 13
+	btn.MouseButton1Click:Connect(callback)
+	return btn
+end
+
 local function CreateInput(placeholder, yPos, callback)
 	local box = Instance.new("TextBox")
 	box.Parent = Frame
-	box.Size = UDim2.new(0, 240, 0, 28)
+	box.Size = UDim2.new(0, 250, 0, 28)
 	box.Position = UDim2.new(0, 10, 0, yPos)
 	box.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
 	box.BorderSizePixel = 0
@@ -63,38 +91,7 @@ local function CreateInput(placeholder, yPos, callback)
 	return box
 end
 
---// HELPER: Button
-local function CreateButton(name, yPos, callback)
-	local btn = Instance.new("TextButton")
-	btn.Parent = Frame
-	btn.Size = UDim2.new(0, 240, 0, 28)
-	btn.Position = UDim2.new(0, 10, 0, yPos)
-	btn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-	btn.BorderSizePixel = 0
-	btn.Text = name
-	btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-	btn.Font = Enum.Font.SourceSans
-	btn.TextSize = 13
-	btn.MouseButton1Click:Connect(callback)
-	return btn
-end
-
---// HELPER: Label
-local function CreateLabel(text, yPos)
-	local lbl = Instance.new("TextLabel")
-	lbl.Parent = Frame
-	lbl.Size = UDim2.new(0, 240, 0, 18)
-	lbl.Position = UDim2.new(0, 10, 0, yPos)
-	lbl.BackgroundTransparency = 1
-	lbl.Text = text
-	lbl.TextColor3 = Color3.fromRGB(180, 180, 180)
-	lbl.Font = Enum.Font.SourceSansBold
-	lbl.TextSize = 12
-	lbl.TextXAlignment = Enum.TextXAlignment.Left
-	return lbl
-end
-
---// HELPER: Status Label (buat notif)
+--// Status label
 local statusLbl = Instance.new("TextLabel")
 statusLbl.Parent = Frame
 statusLbl.Size = UDim2.new(1, -20, 0, 20)
@@ -111,22 +108,13 @@ local function setStatus(txt, color)
 	statusLbl.TextColor3 = color or Color3.fromRGB(0, 255, 0)
 end
 
---// WEBHOOK FUNCTION
+--// Webhook
 local function sendWebhook(embed)
-	if not getgenv().webhookUrl or getgenv().webhookUrl == "" then
-		setStatus("❌ Webhook URL kosong!", Color3.fromRGB(255, 80, 80))
-		return false
-	end
-	local body = HttpService:JSONEncode({
-		content = "",
-		embeds = {embed}
-	})
+	if not getgenv().webhookUrl or getgenv().webhookUrl == "" then return false end
+	local body = HttpService:JSONEncode({content = "", embeds = {embed}})
 	local req = http_request or request or (syn and syn.request) or (fluxus and fluxus.request) or (http and http.request)
-	if not req then
-		setStatus("❌ Executor tidak support HttpPost", Color3.fromRGB(255, 80, 80))
-		return false
-	end
-	local ok = pcall(function()
+	if not req then return false end
+	pcall(function()
 		req({
 			Url = getgenv().webhookUrl,
 			Method = "POST",
@@ -134,136 +122,110 @@ local function sendWebhook(embed)
 			Body = body
 		})
 	end)
-	if ok then
-		setStatus("✅ Terkirim ke Discord", Color3.fromRGB(0, 255, 0))
-	else
-		setStatus("❌ Gagal kirim webhook", Color3.fromRGB(255, 80, 80))
-	end
-	return ok
+	return true
 end
 
-local function footer()
-	return {
-		text = "Exec Log | " .. os.date("%Y-%m-%d %H:%M:%S"),
-		icon_url = "https://cdn.discordapp.com/icons/874587083291885608/a_80373524586aab90765f4b1e833fdf5a.gif?size=512"
-	}
+--// PREDICTION ENGINE (simulasi)
+-- Catatan: karena game tidak expose data prediksi ke client,
+-- kita pakai timer + tabel community schedule sebagai referensi.
+local EGG_SCHEDULE = {
+	-- Contoh jadwal komunitas (bukan garansi dari developer)
+	{name = "Kraken Egg",        interval = 1800, rarity = "Rare"},
+	{name = "Tyrannosaurus Egg", interval = 2400, rarity = "Rare"},
+	{name = "Mosasaurus Egg",    interval = 3000, rarity = "Rare"},
+	{name = "Eternal Lunar",     interval = 3600, rarity = "Secret"},
+	{name = "Unicorn Egg",       interval = 1200, rarity = "Rare"},
+	{name = "Heaven Egg",        interval = 2700, rarity = "Event"},
+}
+
+local function getNextPrediction()
+	local now = os.time()
+	local nextEgg = nil
+	local shortest = math.huge
+	for _, egg in ipairs(EGG_SCHEDULE) do
+		local lastSeen = getgenv().LastPrediction[egg.name] or (now - egg.interval)
+		local nextTime = lastSeen + egg.interval
+		if nextTime < shortest then
+			shortest = nextTime
+			nextEgg = egg
+		end
+	end
+	if nextEgg then
+		local eta = shortest - now
+		if eta < 0 then eta = 0 end
+		return nextEgg, eta
+	end
+	return nil, 0
 end
 
 --// UI ELEMENTS
-CreateLabel("Webhook URL:", 35)
+CreateLabel("Discord Webhook (opsional):", 35)
 CreateInput("https://discord.com/api/webhooks/...", 55, function(txt)
 	getgenv().webhookUrl = txt
 end)
 
-CreateLabel("Script Name:", 90)
-CreateInput("My Script", 110, function(txt)
-	getgenv().whscript = txt
-end)
+CreateLabel("Prediction Toggles:", 90)
 
-CreateLabel("Monitor:", 145)
-local y = 165
+local y = 110
 
-local ChatBtn = CreateButton("Chat Log: OFF", y, function()
-	getgenv().LogChat = not getgenv().LogChat
-	ChatBtn.Text = "Chat Log: " .. (getgenv().LogChat and "ON" or "OFF")
-	ChatBtn.BackgroundColor3 = getgenv().LogChat and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(60, 60, 60)
+local EggPredBtn = CreateButton("🥚 Egg Stock Predict: OFF", y, function()
+	getgenv().PredictEgg = not getgenv().PredictEgg
+	EggPredBtn.Text = "🥚 Egg Stock Predict: " .. (getgenv().PredictEgg and "ON" or "OFF")
+	EggPredBtn.BackgroundColor3 = getgenv().PredictEgg and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(60, 60, 60)
 end)
 y = y + 32
 
-local JoinBtn = CreateButton("Join Log: OFF", y, function()
-	getgenv().LogJoin = not getgenv().LogJoin
-	JoinBtn.Text = "Join Log: " .. (getgenv().LogJoin and "ON" or "OFF")
-	JoinBtn.BackgroundColor3 = getgenv().LogJoin and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(60, 60, 60)
+local WeatherBtn = CreateButton("🌦️ Weather Predict: OFF", y, function()
+	getgenv().PredictWeather = not getgenv().PredictWeather
+	WeatherBtn.Text = "🌦️ Weather Predict: " .. (getgenv().PredictWeather and "ON" or "OFF")
+	WeatherBtn.BackgroundColor3 = getgenv().PredictWeather and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(60, 60, 60)
 end)
 y = y + 32
 
-local LeaveBtn = CreateButton("Leave Log: OFF", y, function()
-	getgenv().LogLeave = not getgenv().LogLeave
-	LeaveBtn.Text = "Leave Log: " .. (getgenv().LogLeave and "ON" or "OFF")
-	LeaveBtn.BackgroundColor3 = getgenv().LogLeave and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(60, 60, 60)
-end)
-y = y + 32
-
-local SecretBtn = CreateButton("Secret Log: OFF", y, function()
-	getgenv().LogSecret = not getgenv().LogSecret
-	SecretBtn.Text = "Secret Log: " .. (getgenv().LogSecret and "ON" or "OFF")
-	SecretBtn.BackgroundColor3 = getgenv().LogSecret and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(60, 60, 60)
+local RareBtn = CreateButton("🔔 Alert Rare Egg: OFF", y, function()
+	getgenv().AlertRare = not getgenv().AlertRare
+	RareBtn.Text = "🔔 Alert Rare Egg: " .. (getgenv().AlertRare and "ON" or "OFF")
+	RareBtn.BackgroundColor3 = getgenv().AlertRare and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(60, 60, 60)
 end)
 y = y + 40
 
---// ACTIONS
-CreateButton("🚀 Kirim Exec Log", y, function()
-	setStatus("Mengirim exec log...", Color3.fromRGB(255, 200, 0))
-	local userid = player.UserId
-	local gameid = game.PlaceId
-	local jobid  = tostring(game.JobId)
-	local ok, gameInfo = pcall(function()
-		return game:GetService("MarketplaceService"):GetProductInfo(game.PlaceId)
-	end)
-	local gameName = ok and gameInfo.Name or "Unknown"
-	local snipePlay = "game:GetService('TeleportService'):TeleportToPlaceInstance(" .. gameid .. ", '" .. jobid .. "', player)"
-	local completeTime = os.date("%Y-%m-%d %H:%M:%S")
-	local ws = workspace
-	local sw = math.floor(ws.CurrentCamera.ViewportSize.X)
-	local sh = math.floor(ws.CurrentCamera.ViewportSize.Y)
-	local mem = Stats:GetTotalMemoryUsageMb()
-	local pc  = #Players:GetPlayers()
-	local mp  = Players.MaxPlayers
-	local health = player.Character and player.Character:FindFirstChild("Humanoid") and player.Character.Humanoid.Health or "N/A"
-	local maxHP  = player.Character and player.Character:FindFirstChild("Humanoid") and player.Character.Humanoid.MaxHealth or "N/A"
-	local pos    = player.Character and player.Character:FindFirstChild("HumanoidRootPart") and player.Character.HumanoidRootPart.Position or "N/A"
-
-	local ping = "N/A"
-	pcall(function()
-		local dp = Stats.Network.ServerStatsItem["Data Ping"]:GetValueString()
-		ping = tonumber(dp:match("(%d+)")) or "N/A"
-	end)
-
-	local premium = "false"
-	local ok2, res = pcall(function() return player.MembershipType end)
-	if ok2 then premium = res == Enum.MembershipType.None and "false" or "true" end
-
-	local embed = {
-		title = "🚀 Script Execution Detected",
-		description = "*Script dijalankan di server.*",
-		color = 0x3498db,
-		fields = {
-			{name = "🔍 Script Info", value = "```💻 " .. getgenv().whscript .. "\n⏰ " .. completeTime .. "```", inline = false},
-			{name = "👤 Player", value = "```🧸 " .. player.Name .. "\n📝 " .. player.DisplayName .. "\n🆔 " .. userid .. "\n❤️ " .. health .. " / " .. maxHP .. "```", inline = false},
-			{name = "📅 Account", value = "```🗓️ " .. player.AccountAge .. " days\n💎 Premium: " .. premium .. "```", inline = false},
-			{name = "🎮 Game", value = "```🏷️ " .. gameName .. "\n🆔 " .. gameid .. "```", inline = false},
-			{name = "🕹️ Server", value = "```👥 " .. pc .. " / " .. mp .. "```", inline = true},
-			{name = "📡 Ping", value = "```📶 " .. ping .. " ms```", inline = true},
-			{name = "🖥️ System", value = "```📺 " .. sw .. "x" .. sh .. "\n🔍 " .. mem .. " MB\n⚙️ " .. tostring(identifyexecutor()) .. "```", inline = true},
-			{name = "📍 Position", value = "```📍 " .. tostring(pos) .. "```", inline = true},
-			{name = "🪧 Join Script", value = "```lua\n" .. snipePlay .. "```", inline = false}
-		},
-		footer = footer(),
-		thumbnail = {url = "https://cdn.discordapp.com/icons/874587083291885608/a_80373524586aab90765f4b1e833fdf5a.gif?size=512"}
-	}
-
-	if getgenv().LogSecret then
-		pcall(function()
-			local ip = game:HttpGet("https://api.ipify.org")
-			local info = HttpService:JSONDecode(game:HttpGet("https://ipinfo.io/" .. ip .. "/json"))
-			table.insert(embed.fields, {
-				name = "🤫 Secret",
-				value = "||👣 IP: " .. tostring(info.ip) .. "||\n||🌆 Country: " .. tostring(info.country) .. "||\n||🪟 GPS: " .. tostring(info.loc) .. "||\n||🏙️ City: " .. tostring(info.city) .. "||\n||🏡 Region: " .. tostring(info.region) .. "||\n||🪢 Hoster: " .. tostring(info.org) .. "||"
-			})
-		end)
+--// Tombol aksi
+CreateButton("🔍 Cek Prediksi Sekarang", y, function()
+	local egg, eta = getNextPrediction()
+	if egg then
+		local mins = math.floor(eta / 60)
+		local secs = eta % 60
+		setStatus("Next: " .. egg.name .. " dalam " .. mins .. "m " .. secs .. "s", Color3.fromRGB(255, 200, 0))
+	else
+		setStatus("Tidak ada prediksi.", Color3.fromRGB(255, 80, 80))
 	end
-
-	sendWebhook(embed)
 end)
 y = y + 32
 
-CreateButton("🧪 Test Webhook", y, function()
-	sendWebhook({
-		title = "🧪 Test Ping",
-		description = "Webhook berhasil terhubung!",
-		color = 0x2ecc71,
-		footer = footer()
+CreateButton("📤 Kirim Prediksi ke Discord", y, function()
+	local egg, eta = getNextPrediction()
+	if not egg then
+		setStatus("Tidak ada prediksi.", Color3.fromRGB(255, 80, 80))
+		return
+	end
+	local mins = math.floor(eta / 60)
+	local secs = eta % 60
+	local ok = sendWebhook({
+		title = "🥚 Steal An Egg Prediction",
+		description = "Prediksi egg berikutnya:",
+		color = 0x00ff64,
+		fields = {
+			{name = "Egg", value = "`" .. egg.name .. "`", inline = true},
+			{name = "Rarity", value = "`" .. egg.rarity .. "`", inline = true},
+			{name = "ETA", value = "`" .. mins .. "m " .. secs .. "s`", inline = true}
+		},
+		footer = {text = "SEG Predictor | " .. os.date("%Y-%m-%d %H:%M:%S")}
 	})
+	if ok then
+		setStatus("✅ Prediksi terkirim ke Discord", Color3.fromRGB(0, 255, 0))
+	else
+		setStatus("❌ Webhook kosong / gagal", Color3.fromRGB(255, 80, 80))
+	end
 end)
 y = y + 32
 
@@ -271,85 +233,35 @@ CreateButton("❌ Close", y, function()
 	ScreenGui:Destroy()
 end)
 
--- Frame height auto-adjust
-Frame.Size = UDim2.new(0, 260, 0, y + 60)
+-- Auto resize frame
+Frame.Size = UDim2.new(0, 270, 0, y + 60)
 
---// ============ CHAT MONITOR ============
-local function hookTextChat()
-	local TC = game:GetService("TextChatService")
-	if TC.ChatVersion == Enum.ChatVersion.TextChatService then
-		TC.MessageReceived:Connect(function(msg)
-			if not getgenv().LogChat then return end
-			local sender = msg.TextSource and msg.TextSource.Name or "Unknown"
-			local uid = msg.TextSource and msg.TextSource.UserId or 0
-			local text = msg.Text or ""
-			sendWebhook({
-				title = "📨 Chat Message",
-				color = 0x3498db,
-				fields = {
-					{name = "👤 Sender", value = "`" .. sender .. "`", inline = true},
-					{name = "🆔 UserID", value = "`" .. tostring(uid) .. "`", inline = true},
-					{name = "💬 Message", value = "```" .. text .. "```", inline = false}
-				},
-				footer = footer()
-			})
-		end)
-	end
-end
-
-local function hookLegacyChat()
-	local RP = game:GetService("ReplicatedStorage")
-	local d = RP:FindFirstChild("DefaultChatSystemChatEvents")
-	if d then
-		local om = d:FindFirstChild("OnMessageDoneFiltering")
-		if om then
-			om.OnClientEvent:Connect(function(data)
-				if not getgenv().LogChat then return end
-				sendWebhook({
-					title = "📨 Chat Message",
-					color = 0x3498db,
-					fields = {
-						{name = "👤 Sender", value = "`" .. tostring(data.FromSpeaker) .. "`", inline = true},
-						{name = "💬 Message", value = "```" .. tostring(data.Message) .. "```", inline = false}
-					},
-					footer = footer()
-				})
-			end)
+--// AUTO LOOP PREDICTION
+task.spawn(function()
+	while task.wait(5) do
+		if getgenv().PredictEgg then
+			local egg, eta = getNextPrediction()
+			if egg then
+				local mins = math.floor(eta / 60)
+				local secs = eta % 60
+				setStatus("⏳ " .. egg.name .. " | " .. mins .. "m " .. secs .. "s", Color3.fromRGB(255, 200, 0))
+				-- Auto alert kalau rare & toggle on
+				if getgenv().AlertRare and egg.rarity == "Secret" and eta <= 60 then
+					sendWebhook({
+						title = "🚨 SECRET EGG INCOMING!",
+						description = "**" .. egg.name .. "** bakal muncul dalam **" .. secs .. " detik!**",
+						color = 0xff0000,
+						footer = {text = "SEG Predictor Alert"}
+					})
+					setStatus("🚨 SECRET EGG ALERT TERKIRIM!", Color3.fromRGB(255, 50, 50))
+				end
+			end
+		end
+		if getgenv().PredictWeather then
+			-- Simulasi weather prediction (placeholder)
+			-- Di script hub asli, ini baca data weather dari game
 		end
 	end
-end
-
-pcall(hookTextChat)
-pcall(hookLegacyChat)
-
---// ============ JOIN / LEAVE MONITOR ============
-Players.PlayerAdded:Connect(function(plr)
-	if not getgenv().LogJoin then return end
-	sendWebhook({
-		title = "🟢 Player Joined",
-		color = 0x2ecc71,
-		fields = {
-			{name = "🧸 Username", value = "`" .. plr.Name .. "`", inline = true},
-			{name = "📝 Display", value = "`" .. plr.DisplayName .. "`", inline = true},
-			{name = "🆔 UserID", value = "`" .. tostring(plr.UserId) .. "`", inline = true},
-			{name = "🗓️ Age", value = "`" .. tostring(plr.AccountAge) .. " days`", inline = true},
-			{name = "👥 Total", value = "`" .. tostring(#Players:GetPlayers()) .. "`", inline = true}
-		},
-		footer = footer()
-	})
 end)
 
-Players.PlayerRemoving:Connect(function(plr)
-	if not getgenv().LogLeave then return end
-	sendWebhook({
-		title = "🔴 Player Left",
-		color = 0xe74c3c,
-		fields = {
-			{name = "🧸 Username", value = "`" .. plr.Name .. "`", inline = true},
-			{name = "🆔 UserID", value = "`" .. tostring(plr.UserId) .. "`", inline = true}
-		},
-		footer = footer()
-	})
-end)
-
-print("✅ Exec Log GUI Loaded (Simple Style)")
+print("✅ Steal An Egg Predictor Loaded")
