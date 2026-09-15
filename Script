@@ -1,9 +1,9 @@
 --[[
 	STEAL AN EGG - Full Predictor + Live Detector
-	- Prediksi timer (estimasi)
-	- Live detect notifikasi spawn (akurat)
-	- Test webhook
-	- Close GUI
+	+ Panel Prediksi Real-Time
+	+ Tombol Kirim Ulang Prediksi
+	+ Test webhook
+	+ Close GUI
 ]]
 
 local Players     = game:GetService("Players")
@@ -19,6 +19,7 @@ getgenv().DetectRift     = false
 getgenv().AlertRare      = false
 getgenv().FilterRarity   = "All"
 getgenv().LastPrediction = {}
+getgenv().LastSentEgg    = nil   -- untuk kirim ulang
 
 --// GUI
 local ScreenGui = Instance.new("ScreenGui")
@@ -28,8 +29,8 @@ ScreenGui.ResetOnSpawn = false
 
 local Frame = Instance.new("Frame")
 Frame.Parent = ScreenGui
-Frame.Size = UDim2.new(0, 290, 0, 480)
-Frame.Position = UDim2.new(0, 20, 0, 100)
+Frame.Size = UDim2.new(0, 320, 0, 660)
+Frame.Position = UDim2.new(0, 20, 0, 60)
 Frame.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
 Frame.BorderSizePixel = 0
 Frame.Active = true
@@ -49,7 +50,7 @@ Title.BorderSizePixel = 0
 local function CreateLabel(text, yPos)
 	local lbl = Instance.new("TextLabel")
 	lbl.Parent = Frame
-	lbl.Size = UDim2.new(0, 270, 0, 18)
+	lbl.Size = UDim2.new(0, 300, 0, 18)
 	lbl.Position = UDim2.new(0, 10, 0, yPos)
 	lbl.BackgroundTransparency = 1
 	lbl.Text = text
@@ -63,14 +64,14 @@ end
 local function CreateButton(name, yPos, callback)
 	local btn = Instance.new("TextButton")
 	btn.Parent = Frame
-	btn.Size = UDim2.new(0, 270, 0, 28)
+	btn.Size = UDim2.new(0, 300, 0, 26)
 	btn.Position = UDim2.new(0, 10, 0, yPos)
 	btn.BackgroundColor3 = Color3.fromRGB(50, 50, 60)
 	btn.BorderSizePixel = 0
 	btn.Text = name
 	btn.TextColor3 = Color3.fromRGB(255, 255, 255)
 	btn.Font = Enum.Font.SourceSans
-	btn.TextSize = 13
+	btn.TextSize = 12
 	btn.MouseButton1Click:Connect(callback)
 	return btn
 end
@@ -78,7 +79,7 @@ end
 local function CreateInput(placeholder, yPos, callback)
 	local box = Instance.new("TextBox")
 	box.Parent = Frame
-	box.Size = UDim2.new(0, 270, 0, 28)
+	box.Size = UDim2.new(0, 300, 0, 26)
 	box.Position = UDim2.new(0, 10, 0, yPos)
 	box.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
 	box.BorderSizePixel = 0
@@ -137,7 +138,7 @@ local function footer()
 	return {text = "SEG Predictor | " .. os.date("%Y-%m-%d %H:%M:%S")}
 end
 
---// PREDICTION ENGINE
+--// PREDICTION DATA
 local EGG_SCHEDULE = {
 	{name = "Kraken Egg",        interval = 1800, rarity = "Rare"},
 	{name = "Tyrannosaurus Egg", interval = 2400, rarity = "Rare"},
@@ -147,27 +148,181 @@ local EGG_SCHEDULE = {
 	{name = "Heaven Egg",        interval = 2700, rarity = "Event"},
 }
 
-local function getNextPrediction()
-	local now = os.time()
-	local nextEgg = nil
-	local shortest = math.huge
-	for _, egg in ipairs(EGG_SCHEDULE) do
-		local lastSeen = getgenv().LastPrediction[egg.name]
-		if lastSeen then
-			local nextTime = lastSeen + egg.interval
-			if nextTime < shortest and nextTime > now then
-				shortest = nextTime
-				nextEgg = egg
-			end
-		end
+for _, egg in ipairs(EGG_SCHEDULE) do
+	if not getgenv().LastPrediction[egg.name] then
+		getgenv().LastPrediction[egg.name] = os.time()
 	end
-	if not nextEgg then return nil, 0 end
-	local eta = shortest - now
-	if eta < 0 then eta = 0 end
-	return nextEgg, eta
 end
 
---// PARSER: notifikasi system chat
+local function getAllPredictions()
+	local now = os.time()
+	local list = {}
+	for _, egg in ipairs(EGG_SCHEDULE) do
+		local lastSeen = getgenv().LastPrediction[egg.name] or now
+		local nextTime = lastSeen + egg.interval
+		local eta = nextTime - now
+		if eta < 0 then eta = 0 end
+		table.insert(list, {
+			name = egg.name,
+			rarity = egg.rarity,
+			eta = eta,
+			interval = egg.interval
+		})
+	end
+	table.sort(list, function(a, b) return a.eta < b.eta end)
+	return list
+end
+
+local function fmtTime(sec)
+	local m = math.floor(sec / 60)
+	local s = sec % 60
+	return string.format("%02dm %02ds", m, s)
+end
+
+local function getNextPrediction()
+	local list = getAllPredictions()
+	if #list == 0 then return nil, 0 end
+	return list[1], list[1].eta
+end
+
+--// FUNGSI KIRIM PREDIKSI (bisa dipanggil berkali-kali)
+local function sendPredictionToDiscord()
+	local egg, eta = getNextPrediction()
+	if not egg then
+		setStatus("")
+		return false
+	end
+	-- Simpan untuk resend
+	getgenv().LastSentEgg = egg
+
+	-- Bikin list semua egg buat embed
+	local allList = getAllPredictions()
+	local listText = ""
+	for i, e in ipairs(allList) do
+		listText = listText .. string.format("%d. **%s** — `%s` (%s)\n", i, e.name, fmtTime(e.eta), e.rarity)
+	end
+
+	local ok = sendWebhook({
+		title = "🔮 Egg Prediction",
+		description = "**Next:** " .. egg.name .. " dalam `" .. fmtTime(eta) .. "`\n\n**Full Prediction List:**\n" .. listText,
+		color = 0x00ff64,
+		fields = {
+			{name = "🥚 Next Egg", value = "`" .. egg.name .. "`", inline = true},
+			{name = "🎯 Rarity", value = "`" .. egg.rarity .. "`", inline = true},
+			{name = "⏰ ETA", value = "`" .. fmtTime(eta) .. "`", inline = true}
+		},
+		footer = footer()
+	})
+	return ok
+end
+
+--// ============ LIVE PREDICTION PANEL ============
+local PanelFrame = Instance.new("Frame")
+PanelFrame.Parent = Frame
+PanelFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
+PanelFrame.BorderSizePixel = 0
+PanelFrame.Position = UDim2.new(0, 10, 0, 200)
+PanelFrame.Size = UDim2.new(0, 300, 0, 175)
+
+local PanelTitle = Instance.new("TextLabel")
+PanelTitle.Parent = PanelFrame
+PanelTitle.Size = UDim2.new(1, 0, 0, 20)
+PanelTitle.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
+PanelTitle.Text = "📊 PREDIKSI LIVE"
+PanelTitle.TextColor3 = Color3.fromRGB(0, 255, 120)
+PanelTitle.Font = Enum.Font.SourceSansBold
+PanelTitle.TextSize = 12
+PanelTitle.BorderSizePixel = 0
+
+local rowContainer = Instance.new("Frame")
+rowContainer.Parent = PanelFrame
+rowContainer.Position = UDim2.new(0, 5, 0, 22)
+rowContainer.Size = UDim2.new(1, -10, 1, -25)
+rowContainer.BackgroundTransparency = 1
+
+local rows = {}
+local function makeRow(index, yPos)
+	local row = Instance.new("Frame")
+	row.Parent = rowContainer
+	row.Position = UDim2.new(0, 0, 0, yPos)
+	row.Size = UDim2.new(1, 0, 0, 23)
+	row.BackgroundColor3 = Color3.fromRGB(25, 25, 32)
+	row.BorderSizePixel = 0
+
+	local nameLbl = Instance.new("TextLabel")
+	nameLbl.Parent = row
+	nameLbl.Position = UDim2.new(0, 5, 0, 0)
+	nameLbl.Size = UDim2.new(0.55, 0, 1, 0)
+	nameLbl.BackgroundTransparency = 1
+	nameLbl.Text = "Egg Name"
+	nameLbl.TextColor3 = Color3.fromRGB(230, 230, 230)
+	nameLbl.Font = Enum.Font.SourceSans
+	nameLbl.TextSize = 12
+	nameLbl.TextXAlignment = Enum.TextXAlignment.Left
+
+	local etaLbl = Instance.new("TextLabel")
+	etaLbl.Parent = row
+	etaLbl.Position = UDim2.new(0.55, 0, 0, 0)
+	etaLbl.Size = UDim2.new(0.30, 0, 1, 0)
+	etaLbl.BackgroundTransparency = 1
+	etaLbl.Text = "--:--"
+	etaLbl.TextColor3 = Color3.fromRGB(255, 200, 0)
+	etaLbl.Font = Enum.Font.SourceSansBold
+	etaLbl.TextSize = 12
+	etaLbl.TextXAlignment = Enum.TextXAlignment.Center
+
+	local rarLbl = Instance.new("TextLabel")
+	rarLbl.Parent = row
+	rarLbl.Position = UDim2.new(0.85, 0, 0, 0)
+	rarLbl.Size = UDim2.new(0.15, 0, 1, 0)
+	rarLbl.BackgroundTransparency = 1
+	rarLbl.Text = "?"
+	rarLbl.TextColor3 = Color3.fromRGB(150, 150, 150)
+	rarLbl.Font = Enum.Font.SourceSans
+	rarLbl.TextSize = 11
+	rarLbl.TextXAlignment = Enum.TextXAlignment.Right
+
+	return {frame = row, name = nameLbl, eta = etaLbl, rarity = rarLbl}
+end
+
+for i = 1, #EGG_SCHEDULE do
+	rows[i] = makeRow(i, (i - 1) * 25)
+end
+
+local function rarityColor(r)
+	if r == "Secret" then return Color3.fromRGB(255, 80, 200) end
+	if r == "Eternal" then return Color3.fromRGB(255, 180, 0) end
+	if r == "Divine" then return Color3.fromRGB(180, 80, 255) end
+	if r == "Event" then return Color3.fromRGB(80, 180, 255) end
+	if r == "Rare" then return Color3.fromRGB(100, 255, 100) end
+	return Color3.fromRGB(180, 180, 180)
+end
+
+local function updatePanel()
+	local list = getAllPredictions()
+	for i, row in ipairs(rows) do
+		if list[i] then
+			row.name.Text = list[i].name
+			row.eta.Text = fmtTime(list[i].eta)
+			row.rarity.Text = list[i].rarity
+			row.rarity.TextColor3 = rarityColor(list[i].rarity)
+
+			if i == 1 then
+				row.frame.BackgroundColor3 = Color3.fromRGB(0, 60, 30)
+				row.eta.TextColor3 = Color3.fromRGB(0, 255, 120)
+			else
+				row.frame.BackgroundColor3 = Color3.fromRGB(25, 25, 32)
+				row.eta.TextColor3 = Color3.fromRGB(255, 200, 0)
+			end
+		else
+			row.name.Text = "-"
+			row.eta.Text = "--:--"
+			row.rarity.Text = ""
+		end
+	end
+end
+
+--// ============ PARSER notifikasi ============
 local function parseNotification(text)
 	local eggName, biome = text:match("A (.+) Egg spawned in (.+)!")
 	if eggName then
@@ -186,7 +341,7 @@ local function parseNotification(text)
 	return nil
 end
 
---// HANDLER notifikasi
+--// ============ HANDLER notifikasi ============
 local function handleNotification(notif)
 	if not notif then return end
 
@@ -194,8 +349,8 @@ local function handleNotification(notif)
 		if not getgenv().DetectEgg then return end
 		if getgenv().FilterRarity ~= "All" and notif.rarity ~= getgenv().FilterRarity then return end
 
-		-- Update prediksi biar timer sinkron
 		getgenv().LastPrediction[notif.egg] = os.time()
+		updatePanel()
 
 		setStatus("🥚 " .. notif.egg .. " @ " .. notif.biome, Color3.fromRGB(255, 200, 0))
 		sendWebhook({
@@ -205,17 +360,20 @@ local function handleNotification(notif)
 			fields = {
 				{name = "Egg", value = "`" .. notif.egg .. "`", inline = true},
 				{name = "Biome", value = "`" .. notif.biome .. "`", inline = true},
-				{name = "Rarity", value = "`" .. notif.rarity .. "`", inline = true},
-				{name = "Raw", value = "```" .. notif.raw .. "```", inline = false}
+				{name = "Rarity", value = "`" .. notif.rarity .. "`", inline = true}
 			},
 			footer = footer()
 		})
 	elseif notif.type == "reset" then
 		if not getgenv().DetectReset then return end
+		for _, egg in ipairs(EGG_SCHEDULE) do
+			getgenv().LastPrediction[egg.name] = os.time()
+		end
+		updatePanel()
 		setStatus("🔄 ALL EGG RESET!", Color3.fromRGB(255, 100, 100))
 		sendWebhook({
 			title = "🔄 ALL EGG RESET!",
-			description = "Semua egg di-reset! Spawn baru di seluruh map.",
+			description = "Semua egg di-reset!",
 			color = 0xff6b6b,
 			footer = footer()
 		})
@@ -224,7 +382,7 @@ local function handleNotification(notif)
 		setStatus("🌀 RIFT EVENT!", Color3.fromRGB(150, 100, 255))
 		sendWebhook({
 			title = "🌀 RIFT EVENT!",
-			description = "Rift event terbuka! Ke Titan Temple sekarang.",
+			description = "Rift event terbuka!",
 			color = 0x9b59b6,
 			footer = footer()
 		})
@@ -271,10 +429,8 @@ CreateInput("https://discord.com/api/webhooks/...", 58, function(txt)
 	getgenv().webhookUrl = txt
 end)
 
--- ===== TEST SECTION =====
-CreateLabel("Test Webhook:", 95)
-
-local y = 115
+CreateLabel("Test Webhook:", 92)
+local y = 112
 
 CreateButton("🧪 Test Ping (cek koneksi)", y, function()
 	if getgenv().webhookUrl == "" then
@@ -284,27 +440,22 @@ CreateButton("🧪 Test Ping (cek koneksi)", y, function()
 	setStatus("Mengirim test ping...", Color3.fromRGB(255, 200, 0))
 	local ok = sendWebhook({
 		title = "🧪 Test Ping",
-		description = "Webhook berhasil terhubung! Siap terima notifikasi egg.",
+		description = "Webhook berhasil terhubung!",
 		color = 0x2ecc71,
 		footer = footer()
 	})
-	if ok then
-		setStatus("✅ Test ping terkirim!", Color3.fromRGB(0, 255, 100))
-	else
-		setStatus("❌ Gagal kirim test", Color3.fromRGB(255, 80, 80))
-	end
+	if ok then setStatus("✅ Test ping terkirim!", Color3.fromRGB(0, 255, 100)) end
 end)
-y = y + 32
+y = y + 30
 
 CreateButton("📨 Test Egg Spawn Notif", y, function()
 	if getgenv().webhookUrl == "" then
 		setStatus("❌ Webhook URL kosong!", Color3.fromRGB(255, 80, 80))
 		return
 	end
-	setStatus("Mengirim test egg notif...", Color3.fromRGB(255, 200, 0))
 	sendWebhook({
 		title = "🥚 EGG SPAWNED! (Test)",
-		description = "**Test Egg** muncul di **Test Biome**",
+		description = "**Test Dragon Egg** muncul di **Cosmic**",
 		color = 0xffaa00,
 		fields = {
 			{name = "Egg", value = "`Test Dragon Egg`", inline = true},
@@ -315,56 +466,58 @@ CreateButton("📨 Test Egg Spawn Notif", y, function()
 	})
 	setStatus("✅ Test egg notif terkirim!", Color3.fromRGB(0, 255, 100))
 end)
-y = y + 40
+y = y + 34
 
--- ===== PREDIKSI SECTION =====
-CreateLabel("Mode Prediksi:", y)
-y = y + 22
+-- ===== KONTROL PREDIKSI =====
+CreateLabel("Kontrol Prediksi:", 390)
 
-local PredictBtn = CreateButton("🔮 Predict Egg (timer): OFF", y, function()
+y = 410
+local PredictBtn = CreateButton("🔮 Predict Live: OFF", y, function()
 	getgenv().PredictEgg = not getgenv().PredictEgg
-	PredictBtn.Text = "🔮 Predict Egg (timer): " .. (getgenv().PredictEgg and "ON" or "OFF")
+	PredictBtn.Text = "🔮 Predict Live: " .. (getgenv().PredictEgg and "ON" or "OFF")
 	PredictBtn.BackgroundColor3 = getgenv().PredictEgg and Color3.fromRGB(0, 130, 0) or Color3.fromRGB(50, 50, 60)
+	if getgenv().PredictEgg then updatePanel() end
 end)
-y = y + 32
+y = y + 30
 
-CreateButton("🔍 Cek Prediksi Sekarang", y, function()
-	local egg, eta = getNextPrediction()
-	if not egg then
-		setStatus("")  -- diam kalau tidak ada
-		return
-	end
-	local mins = math.floor(eta / 60)
-	local secs = eta % 60
-	setStatus("⏳ " .. egg.name .. " | " .. mins .. "m " .. secs .. "s", Color3.fromRGB(255, 200, 0))
-end)
-y = y + 32
-
+-- TOMBOL KIRIM PERTAMA KALI
 CreateButton("📤 Kirim Prediksi ke Discord", y, function()
-	local egg, eta = getNextPrediction()
-	if not egg then
-		setStatus("")
+	if getgenv().webhookUrl == "" then
+		setStatus("❌ Webhook URL kosong!", Color3.fromRGB(255, 80, 80))
 		return
 	end
-	local mins = math.floor(eta / 60)
-	local secs = eta % 60
-	local ok = sendWebhook({
-		title = "🔮 Egg Prediction",
-		description = "Estimasi egg berikutnya:",
-		color = 0x00ff64,
-		fields = {
-			{name = "Egg", value = "`" .. egg.name .. "`", inline = true},
-			{name = "Rarity", value = "`" .. egg.rarity .. "`", inline = true},
-			{name = "ETA", value = "`" .. mins .. "m " .. secs .. "s`", inline = true}
-		},
-		footer = footer()
-	})
-	if ok then setStatus("✅ Prediksi terkirim!", Color3.fromRGB(0, 255, 100)) end
+	setStatus("Mengirim prediksi...", Color3.fromRGB(255, 200, 0))
+	local ok = sendPredictionToDiscord()
+	if ok then
+		setStatus("✅ Prediksi terkirim!", Color3.fromRGB(0, 255, 100))
+	else
+		setStatus("❌ Gagal kirim prediksi", Color3.fromRGB(255, 80, 80))
+	end
 end)
-y = y + 40
+y = y + 30
 
--- ===== LIVE DETECTOR SECTION =====
-CreateLabel("Live Detector (akurat):", y)
+-- ⬇️ TOMBOL BARU: KIRIM ULANG ⬇️
+CreateButton("🔄 Kirim Ulang Prediksi (Resend)", y, function()
+	if getgenv().webhookUrl == "" then
+		setStatus("❌ Webhook URL kosong!", Color3.fromRGB(255, 80, 80))
+		return
+	end
+	if not getgenv().LastSentEgg then
+		setStatus("⚠️ Belum ada prediksi yang dikirim sebelumnya", Color3.fromRGB(255, 200, 0))
+		return
+	end
+	setStatus("Mengirim ulang prediksi...", Color3.fromRGB(255, 200, 0))
+	local ok = sendPredictionToDiscord()
+	if ok then
+		setStatus("🔄 Prediksi terkirim ULANG!", Color3.fromRGB(0, 255, 100))
+	else
+		setStatus("❌ Gagal kirim ulang", Color3.fromRGB(255, 80, 80))
+	end
+end)
+y = y + 34
+
+-- ===== LIVE DETECTOR =====
+CreateLabel("Live Detector:", y)
 y = y + 22
 
 local EggDetBtn = CreateButton("🥚 Detect Egg Spawn: OFF", y, function()
@@ -372,23 +525,22 @@ local EggDetBtn = CreateButton("🥚 Detect Egg Spawn: OFF", y, function()
 	EggDetBtn.Text = "🥚 Detect Egg Spawn: " .. (getgenv().DetectEgg and "ON" or "OFF")
 	EggDetBtn.BackgroundColor3 = getgenv().DetectEgg and Color3.fromRGB(0, 130, 0) or Color3.fromRGB(50, 50, 60)
 end)
-y = y + 32
+y = y + 30
 
 local ResetDetBtn = CreateButton("🔄 Detect Egg Reset: OFF", y, function()
 	getgenv().DetectReset = not getgenv().DetectReset
 	ResetDetBtn.Text = "🔄 Detect Egg Reset: " .. (getgenv().DetectReset and "ON" or "OFF")
 	ResetDetBtn.BackgroundColor3 = getgenv().DetectReset and Color3.fromRGB(0, 130, 0) or Color3.fromRGB(50, 50, 60)
 end)
-y = y + 32
+y = y + 30
 
 local RiftDetBtn = CreateButton("🌀 Detect Rift Event: OFF", y, function()
 	getgenv().DetectRift = not getgenv().DetectRift
 	RiftDetBtn.Text = "🌀 Detect Rift Event: " .. (getgenv().DetectRift and "ON" or "OFF")
 	RiftDetBtn.BackgroundColor3 = getgenv().DetectRift and Color3.fromRGB(0, 130, 0) or Color3.fromRGB(50, 50, 60)
 end)
-y = y + 40
+y = y + 34
 
--- Rarity filter
 local RarityCycle = {"All", "Secret", "Eternal", "Divine"}
 local rarityIndex = 1
 local RarityBtn = CreateButton("🎯 Rarity Filter: All", y, function()
@@ -397,43 +549,38 @@ local RarityBtn = CreateButton("🎯 Rarity Filter: All", y, function()
 	getgenv().FilterRarity = RarityCycle[rarityIndex]
 	RarityBtn.Text = "🎯 Rarity Filter: " .. getgenv().FilterRarity
 end)
-y = y + 40
+y = y + 34
 
--- ===== CLOSE =====
 CreateButton("❌ Close GUI", y, function()
 	ScreenGui:Destroy()
 	print("✅ SEG GUI closed")
 end)
-y = y + 32
+y = y + 30
 
-Frame.Size = UDim2.new(0, 290, 0, y + 55)
+Frame.Size = UDim2.new(0, 320, 0, y + 55)
 
---// AUTO LOOP (prediksi timer)
+--// AUTO LOOP
 task.spawn(function()
-	while task.wait(5) do
-		if not ScreenGui.Parent then break end  -- auto-stop kalau GUI ditutup
+	while task.wait(1) do
+		if not ScreenGui.Parent then break end
 
 		if getgenv().PredictEgg then
-			local egg, eta = getNextPrediction()
-			if egg then  -- DIAM kalau tidak ada egg
-				local mins = math.floor(eta / 60)
-				local secs = eta % 60
-				setStatus("⏳ " .. egg.name .. " | " .. mins .. "m " .. secs .. "s", Color3.fromRGB(255, 200, 0))
+			updatePanel()
 
-				-- Auto alert Secret egg
-				if getgenv().AlertRare and egg.rarity == "Secret" and eta <= 60 then
-					sendWebhook({
-						title = "🚨 SECRET EGG INCOMING!",
-						description = "**" .. egg.name .. "** dalam **" .. secs .. " detik!**",
-						color = 0xff0000,
-						footer = footer()
-					})
-					setStatus("🚨 SECRET EGG ALERT TERKIRIM!", Color3.fromRGB(255, 50, 50))
-				end
+			local egg, eta = getNextPrediction()
+			if egg and getgenv().AlertRare and egg.rarity == "Secret" and eta <= 60 and eta > 0 then
+				sendWebhook({
+					title = "🚨 SECRET EGG INCOMING!",
+					description = "**" .. egg.name .. "** dalam **" .. fmtTime(eta) .. "**!",
+					color = 0xff0000,
+					footer = footer()
+				})
+				setStatus("🚨 SECRET EGG ALERT TERKIRIM!", Color3.fromRGB(255, 50, 50))
 			end
-			-- Kalau nil → DIAM
 		end
 	end
 end)
 
-print("✅ SEG Predictor + Detector Loaded")
+updatePanel()
+
+print("✅ SEG Predictor + Live Panel Loaded")
