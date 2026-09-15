@@ -1,7 +1,7 @@
 --[[
-	STEAL AN EGG - Prediction GUI
-	Style: Simple (SAE GUI V16)
-	Fitur: Egg Stock Predictor + Weather Predictor + Discord Alert
+	STEAL AN EGG - Live Notification Detector
+	Mendeteksi notifikasi spawn egg dari system chat
+	+ Kirim ke Discord webhook secara instan
 ]]
 
 local Players     = game:GetService("Players")
@@ -9,46 +9,46 @@ local HttpService = game:GetService("HttpService")
 local player      = Players.LocalPlayer
 
 --// CONFIG
-getgenv().webhookUrl    = "https://discord.com/api/webhooks/1549381840744218685/v6DyiERBUT-xzPLIk5i3xIT38LEoHNI4FC8tMRvy5CtDbIauDn0FSr7_B6-f_yhNA8V6"
-getgenv().PredictEgg    = false
-getgenv().PredictWeather= false
-getgenv().AlertRare     = false
-getgenv().LastPrediction = {}
+getgenv().webhookUrl   = ""   -- ⬅️ Paste webhook kamu di sini
+getgenv().DetectEgg    = false
+getgenv().DetectReset  = false
+getgenv().DetectRift   = false
+getgenv().FilterRarity = "All"  -- "All", "Secret", "Eternal", "Divine"
 
 --// GUI
 local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "SEGPredict"
+ScreenGui.Name = "SEGNotifDetector"
 ScreenGui.Parent = game:GetService("CoreGui")
 ScreenGui.ResetOnSpawn = false
 
 local Frame = Instance.new("Frame")
 Frame.Parent = ScreenGui
-Frame.Size = UDim2.new(0, 270, 0, 330)
+Frame.Size = UDim2.new(0, 280, 0, 350)
 Frame.Position = UDim2.new(0, 20, 0, 100)
-Frame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+Frame.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
 Frame.BorderSizePixel = 0
 Frame.Active = true
 Frame.Draggable = true
 
 local Title = Instance.new("TextLabel")
 Title.Parent = Frame
-Title.Size = UDim2.new(1, 0, 0, 28)
-Title.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-Title.Text = "🥚 Steal An Egg Predictor"
-Title.TextColor3 = Color3.fromRGB(0, 255, 100)
+Title.Size = UDim2.new(1, 0, 0, 30)
+Title.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
+Title.Text = "🔔 SEG Live Detector"
+Title.TextColor3 = Color3.fromRGB(0, 255, 120)
 Title.Font = Enum.Font.SourceSansBold
 Title.TextSize = 15
 Title.BorderSizePixel = 0
 
---// Helper
+--// Helpers
 local function CreateLabel(text, yPos)
 	local lbl = Instance.new("TextLabel")
 	lbl.Parent = Frame
-	lbl.Size = UDim2.new(0, 250, 0, 18)
+	lbl.Size = UDim2.new(0, 260, 0, 18)
 	lbl.Position = UDim2.new(0, 10, 0, yPos)
 	lbl.BackgroundTransparency = 1
 	lbl.Text = text
-	lbl.TextColor3 = Color3.fromRGB(180, 180, 180)
+	lbl.TextColor3 = Color3.fromRGB(170, 170, 180)
 	lbl.Font = Enum.Font.SourceSansBold
 	lbl.TextSize = 12
 	lbl.TextXAlignment = Enum.TextXAlignment.Left
@@ -58,9 +58,9 @@ end
 local function CreateButton(name, yPos, callback)
 	local btn = Instance.new("TextButton")
 	btn.Parent = Frame
-	btn.Size = UDim2.new(0, 250, 0, 28)
+	btn.Size = UDim2.new(0, 260, 0, 28)
 	btn.Position = UDim2.new(0, 10, 0, yPos)
-	btn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+	btn.BackgroundColor3 = Color3.fromRGB(50, 50, 60)
 	btn.BorderSizePixel = 0
 	btn.Text = name
 	btn.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -73,14 +73,14 @@ end
 local function CreateInput(placeholder, yPos, callback)
 	local box = Instance.new("TextBox")
 	box.Parent = Frame
-	box.Size = UDim2.new(0, 250, 0, 28)
+	box.Size = UDim2.new(0, 260, 0, 28)
 	box.Position = UDim2.new(0, 10, 0, yPos)
-	box.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+	box.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
 	box.BorderSizePixel = 0
 	box.Text = ""
 	box.PlaceholderText = placeholder
 	box.TextColor3 = Color3.fromRGB(255, 255, 255)
-	box.PlaceholderColor3 = Color3.fromRGB(140, 140, 140)
+	box.PlaceholderColor3 = Color3.fromRGB(130, 130, 140)
 	box.Font = Enum.Font.SourceSans
 	box.TextSize = 12
 	box.ClearTextOnFocus = false
@@ -91,21 +91,21 @@ local function CreateInput(placeholder, yPos, callback)
 	return box
 end
 
---// Status label
+--// Status
 local statusLbl = Instance.new("TextLabel")
 statusLbl.Parent = Frame
 statusLbl.Size = UDim2.new(1, -20, 0, 20)
 statusLbl.Position = UDim2.new(0, 10, 1, -25)
 statusLbl.BackgroundTransparency = 1
-statusLbl.Text = "Ready."
-statusLbl.TextColor3 = Color3.fromRGB(0, 255, 0)
+statusLbl.Text = "Waiting for notifications..."
+statusLbl.TextColor3 = Color3.fromRGB(0, 255, 100)
 statusLbl.Font = Enum.Font.SourceSans
 statusLbl.TextSize = 12
 statusLbl.TextXAlignment = Enum.TextXAlignment.Left
 
 local function setStatus(txt, color)
 	statusLbl.Text = txt
-	statusLbl.TextColor3 = color or Color3.fromRGB(0, 255, 0)
+	statusLbl.TextColor3 = color or Color3.fromRGB(0, 255, 100)
 end
 
 --// Webhook
@@ -125,143 +125,163 @@ local function sendWebhook(embed)
 	return true
 end
 
---// PREDICTION ENGINE (simulasi)
--- Catatan: karena game tidak expose data prediksi ke client,
--- kita pakai timer + tabel community schedule sebagai referensi.
-local EGG_SCHEDULE = {
-	-- Contoh jadwal komunitas (bukan garansi dari developer)
-	{name = "Kraken Egg",        interval = 1800, rarity = "Rare"},
-	{name = "Tyrannosaurus Egg", interval = 2400, rarity = "Rare"},
-	{name = "Mosasaurus Egg",    interval = 3000, rarity = "Rare"},
-	{name = "Eternal Lunar",     interval = 3600, rarity = "Secret"},
-	{name = "Unicorn Egg",       interval = 1200, rarity = "Rare"},
-	{name = "Heaven Egg",        interval = 2700, rarity = "Event"},
-}
-
-local function getNextPrediction()
-	local now = os.time()
-	local nextEgg = nil
-	local shortest = math.huge
-	for _, egg in ipairs(EGG_SCHEDULE) do
-		local lastSeen = getgenv().LastPrediction[egg.name] or (now - egg.interval)
-		local nextTime = lastSeen + egg.interval
-		if nextTime < shortest then
-			shortest = nextTime
-			nextEgg = egg
+--// PARSER: Deteksi notifikasi dari teks chat
+local function parseNotification(text)
+	-- Deteksi Rare Egg Spawn
+	local eggName, biome = text:match("A (.+) Egg spawned in (.+)!")
+	if eggName then
+		local rarity = "Unknown"
+		if text:find("Secret") then rarity = "Secret"
+		elseif text:find("Eternal") then rarity = "Eternal"
+		elseif text:find("Divine") then rarity = "Divine"
+		elseif text:find("Rare") then rarity = "Rare"
 		end
+		return {type = "egg", egg = eggName, biome = biome, rarity = rarity, raw = text}
 	end
-	if nextEgg then
-		local eta = shortest - now
-		if eta < 0 then eta = 0 end
-		return nextEgg, eta
+
+	-- Deteksi All Egg Reset
+	if text:find("ALL EGG RESET") then
+		return {type = "reset", raw = text}
 	end
-	return nil, 0
+
+	-- Deteksi Rift Event
+	if text:find("Rift") and (text:find("spawn") or text:find("open") or text:find("event")) then
+		return {type = "rift", raw = text}
+	end
+
+	return nil
 end
 
---// UI ELEMENTS
-CreateLabel("Discord Webhook (opsional):", 35)
-CreateInput("https://discord.com/api/webhooks/...", 55, function(txt)
+--// HANDLER
+local function handleNotification(notif)
+	if not notif then return end
+
+	if notif.type == "egg" then
+		if not getgenv().DetectEgg then return end
+		-- Filter rarity
+		if getgenv().FilterRarity ~= "All" and notif.rarity ~= getgenv().FilterRarity then return end
+
+		setStatus("🥚 " .. notif.egg .. " @ " .. notif.biome, Color3.fromRGB(255, 200, 0))
+		sendWebhook({
+			title = "🥚 EGG SPAWNED!",
+			description = "**" .. notif.egg .. "** muncul di **" .. notif.biome .. "**",
+			color = notif.rarity == "Divine" and 0xff00ff or (notif.rarity == "Eternal" and 0xffaa00 or 0x00ff64),
+			fields = {
+				{name = "Egg", value = "`" .. notif.egg .. "`", inline = true},
+				{name = "Biome", value = "`" .. notif.biome .. "`", inline = true},
+				{name = "Rarity", value = "`" .. notif.rarity .. "`", inline = true},
+				{name = "Raw", value = "```" .. notif.raw .. "```", inline = false}
+			},
+			footer = {text = "SEG Live Detector | " .. os.date("%H:%M:%S")}
+		})
+	elseif notif.type == "reset" then
+		if not getgenv().DetectReset then return end
+		setStatus("🔄 ALL EGG RESET!", Color3.fromRGB(255, 100, 100))
+		sendWebhook({
+			title = "🔄 ALL EGG RESET!",
+			description = "Semua egg di-reset! Spawn baru di seluruh map.",
+			color = 0xff6b6b,
+			footer = {text = "SEG Live Detector | " .. os.date("%H:%M:%S")}
+		})
+	elseif notif.type == "rift" then
+		if not getgenv().DetectRift then return end
+		setStatus("🌀 RIFT EVENT!", Color3.fromRGB(150, 100, 255))
+		sendWebhook({
+			title = "🌀 RIFT EVENT!",
+			description = "Rift event terbuka! Ke Titan Temple sekarang.",
+			color = 0x9b59b6,
+			footer = {text = "SEG Live Detector | " .. os.date("%H:%M:%S")}
+		})
+	end
+end
+
+--// HOOK SYSTEM CHAT
+local function hookSystemChat()
+	-- TextChatService (baru)
+	local TC = game:GetService("TextChatService")
+	if TC.ChatVersion == Enum.ChatVersion.TextChatService then
+		TC.MessageReceived:Connect(function(msg)
+			local text = msg.Text or ""
+			local notif = parseNotification(text)
+			if notif then
+				-- Cek apakah dari system (bukan player)
+				local source = msg.TextSource
+				if not source or source.Name == "System" or source.Name == "Roblox" then
+					handleNotification(notif)
+				end
+			end
+		end)
+	end
+
+	-- Legacy chat
+	local RP = game:GetService("ReplicatedStorage")
+	local defaultChat = RP:FindFirstChild("DefaultChatSystemChatEvents")
+	if defaultChat then
+		local onMessage = defaultChat:FindFirstChild("OnMessageDoneFiltering")
+		if onMessage then
+			onMessage.OnClientEvent:Connect(function(data)
+				local text = data.Message or ""
+				local notif = parseNotification(text)
+				if notif and (data.FromSpeaker == "System" or data.FromSpeaker == "Roblox") then
+					handleNotification(notif)
+				end
+			end)
+		end
+	end
+end
+
+pcall(hookSystemChat)
+
+--// UI
+CreateLabel("Discord Webhook:", 38)
+CreateInput("https://discord.com/api/webhooks/...", 58, function(txt)
 	getgenv().webhookUrl = txt
 end)
 
-CreateLabel("Prediction Toggles:", 90)
+CreateLabel("Detect:", 95)
 
-local y = 110
+local y = 115
 
-local EggPredBtn = CreateButton("🥚 Egg Stock Predict: OFF", y, function()
-	getgenv().PredictEgg = not getgenv().PredictEgg
-	EggPredBtn.Text = "🥚 Egg Stock Predict: " .. (getgenv().PredictEgg and "ON" or "OFF")
-	EggPredBtn.BackgroundColor3 = getgenv().PredictEgg and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(60, 60, 60)
+local EggBtn = CreateButton("🥚 Detect Egg Spawn: OFF", y, function()
+	getgenv().DetectEgg = not getgenv().DetectEgg
+	EggBtn.Text = "🥚 Detect Egg Spawn: " .. (getgenv().DetectEgg and "ON" or "OFF")
+	EggBtn.BackgroundColor3 = getgenv().DetectEgg and Color3.fromRGB(0, 130, 0) or Color3.fromRGB(50, 50, 60)
 end)
 y = y + 32
 
-local WeatherBtn = CreateButton("🌦️ Weather Predict: OFF", y, function()
-	getgenv().PredictWeather = not getgenv().PredictWeather
-	WeatherBtn.Text = "🌦️ Weather Predict: " .. (getgenv().PredictWeather and "ON" or "OFF")
-	WeatherBtn.BackgroundColor3 = getgenv().PredictWeather and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(60, 60, 60)
+local ResetBtn = CreateButton("🔄 Detect Egg Reset: OFF", y, function()
+	getgenv().DetectReset = not getgenv().DetectReset
+	ResetBtn.Text = "🔄 Detect Egg Reset: " .. (getgenv().DetectReset and "ON" or "OFF")
+	ResetBtn.BackgroundColor3 = getgenv().DetectReset and Color3.fromRGB(0, 130, 0) or Color3.fromRGB(50, 50, 60)
 end)
 y = y + 32
 
-local RareBtn = CreateButton("🔔 Alert Rare Egg: OFF", y, function()
-	getgenv().AlertRare = not getgenv().AlertRare
-	RareBtn.Text = "🔔 Alert Rare Egg: " .. (getgenv().AlertRare and "ON" or "OFF")
-	RareBtn.BackgroundColor3 = getgenv().AlertRare and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(60, 60, 60)
+local RiftBtn = CreateButton("🌀 Detect Rift Event: OFF", y, function()
+	getgenv().DetectRift = not getgenv().DetectRift
+	RiftBtn.Text = "🌀 Detect Rift Event: " .. (getgenv().DetectRift and "ON" or "OFF")
+	RiftBtn.BackgroundColor3 = getgenv().DetectRift and Color3.fromRGB(0, 130, 0) or Color3.fromRGB(50, 50, 60)
 end)
 y = y + 40
 
---// Tombol aksi
-CreateButton("🔍 Cek Prediksi Sekarang", y, function()
-	local egg, eta = getNextPrediction()
-	if egg then
-		local mins = math.floor(eta / 60)
-		local secs = eta % 60
-		setStatus("Next: " .. egg.name .. " dalam " .. mins .. "m " .. secs .. "s", Color3.fromRGB(255, 200, 0))
-	else
-		setStatus("Tidak ada prediksi.", Color3.fromRGB(255, 80, 80))
-	end
-end)
-y = y + 32
+--// Rarity filter
+CreateLabel("Filter Rarity:", y)
+y = y + 20
 
-CreateButton("📤 Kirim Prediksi ke Discord", y, function()
-	local egg, eta = getNextPrediction()
-	if not egg then
-		setStatus("Tidak ada prediksi.", Color3.fromRGB(255, 80, 80))
-		return
-	end
-	local mins = math.floor(eta / 60)
-	local secs = eta % 60
-	local ok = sendWebhook({
-		title = "🥚 Steal An Egg Prediction",
-		description = "Prediksi egg berikutnya:",
-		color = 0x00ff64,
-		fields = {
-			{name = "Egg", value = "`" .. egg.name .. "`", inline = true},
-			{name = "Rarity", value = "`" .. egg.rarity .. "`", inline = true},
-			{name = "ETA", value = "`" .. mins .. "m " .. secs .. "s`", inline = true}
-		},
-		footer = {text = "SEG Predictor | " .. os.date("%Y-%m-%d %H:%M:%S")}
-	})
-	if ok then
-		setStatus("✅ Prediksi terkirim ke Discord", Color3.fromRGB(0, 255, 0))
-	else
-		setStatus("❌ Webhook kosong / gagal", Color3.fromRGB(255, 80, 80))
-	end
+local RarityCycle = {"All", "Secret", "Eternal", "Divine"}
+local rarityIndex = 1
+local RarityBtn = CreateButton("Rarity: All", y, function()
+	rarityIndex = rarityIndex + 1
+	if rarityIndex > #RarityCycle then rarityIndex = 1 end
+	getgenv().FilterRarity = RarityCycle[rarityIndex]
+	RarityBtn.Text = "Rarity: " .. getgenv().FilterRarity
 end)
-y = y + 32
+y = y + 40
 
-CreateButton("❌ Close", y, function()
+CreateButton("❌ Close GUI", y, function()
 	ScreenGui:Destroy()
 end)
+y = y + 32
 
--- Auto resize frame
-Frame.Size = UDim2.new(0, 270, 0, y + 60)
+Frame.Size = UDim2.new(0, 280, 0, y + 55)
 
---// AUTO LOOP PREDICTION
-task.spawn(function()
-	while task.wait(5) do
-		if getgenv().PredictEgg then
-			local egg, eta = getNextPrediction()
-			if egg then
-				local mins = math.floor(eta / 60)
-				local secs = eta % 60
-				setStatus("⏳ " .. egg.name .. " | " .. mins .. "m " .. secs .. "s", Color3.fromRGB(255, 200, 0))
-				-- Auto alert kalau rare & toggle on
-				if getgenv().AlertRare and egg.rarity == "Secret" and eta <= 60 then
-					sendWebhook({
-						title = "🚨 SECRET EGG INCOMING!",
-						description = "**" .. egg.name .. "** bakal muncul dalam **" .. secs .. " detik!**",
-						color = 0xff0000,
-						footer = {text = "SEG Predictor Alert"}
-					})
-					setStatus("🚨 SECRET EGG ALERT TERKIRIM!", Color3.fromRGB(255, 50, 50))
-				end
-			end
-		end
-		if getgenv().PredictWeather then
-			-- Simulasi weather prediction (placeholder)
-			-- Di script hub asli, ini baca data weather dari game
-		end
-	end
-end)
-
-print("✅ Steal An Egg Predictor Loaded")
+print("✅ SEG Live Detector Loaded")
