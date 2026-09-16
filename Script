@@ -1,11 +1,13 @@
 --[[
-	FOLLOW PLAYER — PRETTY EDITION
-	Auto-switch saat deket • Blocklist • Tween
+	FOLLOW PLAYER + AUTO CLICKER — PRETTY EDITION
+	Auto-switch saat deket • Blocklist • Tween • Auto Clicker
 ]]
 
 local Players      = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local UIS          = game:GetService("UserInputService")
+local RunService   = game:GetService("RunService")
+local VIM          = game:GetService("VirtualInputManager")
 
 local LP = Players.LocalPlayer
 
@@ -27,13 +29,18 @@ local C = {
 }
 
 --// State
-getgenv().FollowEnabled  = false
-getgenv().FollowSpeed    = 200
-getgenv().SwitchDist     = 6
-getgenv().Blocklist      = {}
-getgenv().CurrentTarget  = nil
-getgenv().ActiveTween    = nil
-getgenv().SwitchCount    = 0
+getgenv().FollowEnabled   = false
+getgenv().FollowSpeed     = 200
+getgenv().SwitchDist      = 6
+getgenv().Blocklist       = {}
+getgenv().CurrentTarget   = nil
+getgenv().ActiveTween     = nil
+getgenv().SwitchCount     = 0
+
+getgenv().ClickerEnabled  = false
+getgenv().ClickerCPS      = 10
+getgenv().ClickerMode     = "Center"  -- "Center" / "Mouse"
+getgenv().ClickerCount    = 0
 
 --// Helpers
 local function corner(p, r)
@@ -85,19 +92,19 @@ ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 -- Shadow
 local Shadow = Instance.new("Frame")
 Shadow.Parent = ScreenGui
-Shadow.Size = UDim2.new(0, 680, 0, 660)
-Shadow.Position = UDim2.new(0.5, -336, 0.5, -326)
+Shadow.Size = UDim2.new(0, 680, 0, 800)
+Shadow.Position = UDim2.new(0.5, -336, 0.5, -396)
 Shadow.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 Shadow.BackgroundTransparency = 0.5
 Shadow.BorderSizePixel = 0
 Shadow.ZIndex = 0
 corner(Shadow, 24)
 
--- Glow effect (behind main)
+-- Glow
 local Glow = Instance.new("Frame")
 Glow.Parent = ScreenGui
-Glow.Size = UDim2.new(0, 680, 0, 660)
-Glow.Position = UDim2.new(0.5, -340, 0.5, -330)
+Glow.Size = UDim2.new(0, 680, 0, 800)
+Glow.Position = UDim2.new(0.5, -340, 0.5, -400)
 Glow.BackgroundColor3 = C.accent
 Glow.BackgroundTransparency = 0.85
 Glow.BorderSizePixel = 0
@@ -108,8 +115,8 @@ gradient(Glow, C.accent, C.accent2, 45)
 -- Main
 local Main = Instance.new("Frame")
 Main.Parent = ScreenGui
-Main.Size = UDim2.new(0, 680, 0, 660)
-Main.Position = UDim2.new(0.5, -340, 0.5, -330)
+Main.Size = UDim2.new(0, 680, 0, 800)
+Main.Position = UDim2.new(0.5, -340, 0.5, -400)
 Main.BackgroundColor3 = C.bg
 Main.BorderSizePixel = 0
 Main.Active = true
@@ -125,7 +132,6 @@ Header.Size = UDim2.new(1, 0, 0, 68)
 Header.BackgroundColor3 = C.surface
 Header.BorderSizePixel = 0
 corner(Header, 20)
--- cover bottom corners
 local HeaderBot = Instance.new("Frame")
 HeaderBot.Parent = Header
 HeaderBot.Size = UDim2.new(1, 0, 0, 22)
@@ -135,7 +141,6 @@ HeaderBot.BorderSizePixel = 0
 HeaderBot.ZIndex = 1
 gradient(Header, Color3.fromRGB(70, 45, 180), Color3.fromRGB(45, 110, 180), 90)
 
--- Icon
 local IconCircle = Instance.new("Frame")
 IconCircle.Parent = Header
 IconCircle.Size = UDim2.new(0, 44, 0, 44)
@@ -159,11 +164,11 @@ local TitleLbl = Instance.new("TextLabel")
 TitleLbl.Parent = Header
 TitleLbl.BackgroundTransparency = 1
 TitleLbl.Position = UDim2.new(0, 76, 0, 10)
-TitleLbl.Size = UDim2.new(1, -140, 0, 26)
-TitleLbl.Text = "Follow Player"
+TitleLbl.Size = UDim2.new(1, -220, 0, 26)
+TitleLbl.Text = "Follow Player + Clicker"
 TitleLbl.TextColor3 = Color3.fromRGB(255, 255, 255)
 TitleLbl.Font = Enum.Font.GothamBold
-TitleLbl.TextSize = 20
+TitleLbl.TextSize = 18
 TitleLbl.TextXAlignment = Enum.TextXAlignment.Left
 TitleLbl.ZIndex = 2
 
@@ -171,16 +176,16 @@ local SubLbl = Instance.new("TextLabel")
 SubLbl.Parent = Header
 SubLbl.BackgroundTransparency = 1
 SubLbl.Position = UDim2.new(0, 76, 0, 38)
-SubLbl.Size = UDim2.new(1, -140, 0, 18)
-SubLbl.Text = "tween  •  auto-switch  •  blocklist"
+SubLbl.Size = UDim2.new(1, -220, 0, 18)
+SubLbl.Text = "tween  •  auto-switch  •  blocklist  •  autoclicker"
 SubLbl.TextColor3 = Color3.fromRGB(255, 255, 255)
 SubLbl.TextTransparency = 0.2
 SubLbl.Font = Enum.Font.Gotham
-SubLbl.TextSize = 12
+SubLbl.TextSize = 11
 SubLbl.TextXAlignment = Enum.TextXAlignment.Left
 SubLbl.ZIndex = 2
 
--- Switch counter badge
+-- Switch badge
 local SwitchBadge = Instance.new("Frame")
 SwitchBadge.Parent = Header
 SwitchBadge.Size = UDim2.new(0, 100, 0, 28)
@@ -195,7 +200,7 @@ local SwitchLbl = Instance.new("TextLabel")
 SwitchLbl.Parent = SwitchBadge
 SwitchLbl.Size = UDim2.new(1, 0, 1, 0)
 SwitchLbl.BackgroundTransparency = 1
-SwitchLbl.Text = "🔄 Switches: 0"
+SwitchLbl.Text = "🔄 0"
 SwitchLbl.TextColor3 = Color3.fromRGB(255, 255, 255)
 SwitchLbl.Font = Enum.Font.GothamBold
 SwitchLbl.TextSize = 12
@@ -223,6 +228,7 @@ CloseBtn.MouseLeave:Connect(function()
 end)
 CloseBtn.MouseButton1Click:Connect(function()
 	getgenv().FollowEnabled = false
+	getgenv().ClickerEnabled = false
 	if getgenv().ActiveTween then pcall(function() getgenv().ActiveTween:Cancel() end) end
 	local char = LP.Character
 	if char then
@@ -245,7 +251,6 @@ corner(TargetCard, 14)
 local TargetStroke = stroke(TargetCard, C.stroke, 1)
 padding(TargetCard, 14, 14, 16, 16)
 
--- Left: avatar placeholder
 local AvatarBox = Instance.new("Frame")
 AvatarBox.Parent = TargetCard
 AvatarBox.Size = UDim2.new(0, 68, 0, 68)
@@ -264,12 +269,11 @@ AvatarLbl.TextColor3 = C.textMuted
 AvatarLbl.Font = Enum.Font.GothamBold
 AvatarLbl.TextSize = 26
 
--- Right: info
 local StatusTag = Instance.new("Frame")
 StatusTag.Parent = TargetCard
 StatusTag.Position = UDim2.new(0, 84, 0, 2)
 StatusTag.Size = UDim2.new(0, 110, 0, 18)
-StatusTag.BackgroundColor3 = C.accent
+StatusTag.BackgroundColor3 = C.surface3
 StatusTag.BorderSizePixel = 0
 corner(StatusTag, 9)
 
@@ -304,7 +308,6 @@ TargetSubLbl.Font = Enum.Font.Gotham
 TargetSubLbl.TextSize = 11
 TargetSubLbl.TextXAlignment = Enum.TextXAlignment.Left
 
--- Distance progress bar
 local DistBar = Instance.new("Frame")
 DistBar.Parent = TargetCard
 DistBar.Position = UDim2.new(0, 84, 0, 68)
@@ -332,21 +335,18 @@ corner(ControlsCard, 14)
 stroke(ControlsCard, C.stroke, 1)
 padding(ControlsCard, 14, 14, 16, 16)
 
--- Toggle button
 local ToggleBtn = Instance.new("TextButton")
 ToggleBtn.Parent = ControlsCard
 ToggleBtn.Size = UDim2.new(0, 160, 0, 44)
 ToggleBtn.Position = UDim2.new(0, 0, 0, 0)
-ToggleBtn.BackgroundColor3 = C.surface3
+ToggleBtn.BackgroundColor3 = C.accent
 ToggleBtn.Text = "▶  Start Follow"
-ToggleBtn.TextColor3 = C.text
+ToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 ToggleBtn.Font = Enum.Font.GothamBold
 ToggleBtn.TextSize = 14
 ToggleBtn.BorderSizePixel = 0
 corner(ToggleBtn, 12)
-stroke(ToggleBtn, C.stroke, 1)
-local ToggleGrad = gradient(ToggleBtn, C.surface3, C.surface2, 0)
-ToggleGrad.Enabled = false
+local ToggleGrad = gradient(ToggleBtn, C.accent, C.accent2, 0)
 
 local function updateToggleVisual()
 	if getgenv().FollowEnabled then
@@ -359,7 +359,6 @@ local function updateToggleVisual()
 		ToggleBtn.BackgroundColor3 = C.accent
 		ToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 		ToggleGrad.Enabled = true
-		ToggleGrad.Color = ColorSequence.new(C.accent, C.accent2)
 	end
 end
 
@@ -448,22 +447,192 @@ makeSlider(ControlsCard, 400, 0, 220, "Switch dist", 3, 30, 6, function(v)
 	getgenv().SwitchDist = v
 end)
 
--- hint text
 local HintLbl = Instance.new("TextLabel")
 HintLbl.Parent = ControlsCard
 HintLbl.Position = UDim2.new(0, 0, 0, 50)
 HintLbl.Size = UDim2.new(1, 0, 0, 14)
 HintLbl.BackgroundTransparency = 1
-HintLbl.Text = "💡 Begitu jarak ke target ≤ Switch dist, otomatis ganti ke player berikutnya"
+HintLbl.Text = "💡 Jarak ≤ Switch dist → otomatis ganti player berikutnya"
 HintLbl.TextColor3 = C.textMuted
 HintLbl.Font = Enum.Font.Gotham
 HintLbl.TextSize = 11
 HintLbl.TextXAlignment = Enum.TextXAlignment.Left
 
+-- ========== AUTO CLICKER CARD ==========
+local ClickerCard = Instance.new("Frame")
+ClickerCard.Parent = Main
+ClickerCard.Position = UDim2.new(0, 20, 0, 306)
+ClickerCard.Size = UDim2.new(1, -40, 0, 118)
+ClickerCard.BackgroundColor3 = C.surface
+ClickerCard.BorderSizePixel = 0
+corner(ClickerCard, 14)
+stroke(ClickerCard, C.stroke, 1)
+padding(ClickerCard, 14, 14, 16, 16)
+
+-- Section title with accent bar
+local ClickerTitle = Instance.new("TextLabel")
+ClickerTitle.Parent = ClickerCard
+ClickerTitle.Position = UDim2.new(0, 0, 0, 0)
+ClickerTitle.Size = UDim2.new(1, -180, 0, 18)
+ClickerTitle.BackgroundTransparency = 1
+ClickerTitle.Text = "🖱️  AUTO CLICKER"
+ClickerTitle.TextColor3 = C.accent2
+ClickerTitle.Font = Enum.Font.GothamBold
+ClickerTitle.TextSize = 12
+ClickerTitle.TextXAlignment = Enum.TextXAlignment.Left
+
+-- Clicker count badge
+local ClickCountLbl = Instance.new("TextLabel")
+ClickCountLbl.Parent = ClickerCard
+ClickCountLbl.Position = UDim2.new(1, -180, 0, 0)
+ClickCountLbl.Size = UDim2.new(0, 180, 0, 18)
+ClickCountLbl.BackgroundTransparency = 1
+ClickCountLbl.Text = "Clicks: 0"
+ClickCountLbl.TextColor3 = C.textMuted
+ClickCountLbl.Font = Enum.Font.GothamBold
+ClickCountLbl.TextSize = 11
+ClickCountLbl.TextXAlignment = Enum.TextXAlignment.Right
+
+-- Clicker toggle button
+local ClickToggleBtn = Instance.new("TextButton")
+ClickToggleBtn.Parent = ClickerCard
+ClickToggleBtn.Size = UDim2.new(0, 160, 0, 40)
+ClickToggleBtn.Position = UDim2.new(0, 0, 0, 24)
+ClickToggleBtn.BackgroundColor3 = C.surface3
+ClickToggleBtn.Text = "▶  Start Clicker"
+ClickToggleBtn.TextColor3 = C.text
+ClickToggleBtn.Font = Enum.Font.GothamBold
+ClickToggleBtn.TextSize = 13
+ClickToggleBtn.BorderSizePixel = 0
+corner(ClickToggleBtn, 10)
+stroke(ClickToggleBtn, C.stroke, 1)
+
+local function updateClickerVisual()
+	if getgenv().ClickerEnabled then
+		ClickToggleBtn.Text = "■  Stop Clicker"
+		ClickToggleBtn.BackgroundColor3 = C.danger
+		ClickToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+	else
+		ClickToggleBtn.Text = "▶  Start Clicker"
+		ClickToggleBtn.BackgroundColor3 = C.surface3
+		ClickToggleBtn.TextColor3 = C.text
+	end
+end
+
+-- Mode button
+local ClickModeBtn = Instance.new("TextButton")
+ClickModeBtn.Parent = ClickerCard
+ClickModeBtn.Size = UDim2.new(0, 120, 0, 40)
+ClickModeBtn.Position = UDim2.new(0, 170, 0, 24)
+ClickModeBtn.BackgroundColor3 = C.surface2
+ClickModeBtn.Text = "📍  Center"
+ClickModeBtn.TextColor3 = C.text
+ClickModeBtn.Font = Enum.Font.GothamBold
+ClickModeBtn.TextSize = 12
+ClickModeBtn.BorderSizePixel = 0
+corner(ClickModeBtn, 10)
+stroke(ClickModeBtn, C.stroke, 1)
+hover(ClickModeBtn, C.surface2, Color3.fromRGB(45, 45, 60))
+ClickModeBtn.MouseButton1Click:Connect(function()
+	if getgenv().ClickerMode == "Center" then
+		getgenv().ClickerMode = "Mouse"
+		ClickModeBtn.Text = "🖱️  Mouse"
+	else
+		getgenv().ClickerMode = "Center"
+		ClickModeBtn.Text = "📍  Center"
+	end
+end)
+
+-- CPS slider (inline)
+local CPSBox = Instance.new("Frame")
+CPSBox.Parent = ClickerCard
+CPSBox.Position = UDim2.new(0, 300, 0, 24)
+CPSBox.Size = UDim2.new(0, 320, 0, 40)
+CPSBox.BackgroundColor3 = C.surface2
+CPSBox.BorderSizePixel = 0
+corner(CPSBox, 10)
+
+local CPSLbl = Instance.new("TextLabel")
+CPSLbl.Parent = CPSBox
+CPSLbl.Position = UDim2.new(0, 12, 0, 2)
+CPSLbl.Size = UDim2.new(1, -24, 0, 14)
+CPSLbl.BackgroundTransparency = 1
+CPSLbl.Text = "CPS: 10"
+CPSLbl.TextColor3 = C.textDim
+CPSLbl.Font = Enum.Font.GothamMedium
+CPSLbl.TextSize = 11
+CPSLbl.TextXAlignment = Enum.TextXAlignment.Left
+
+local CPSBar = Instance.new("Frame")
+CPSBar.Parent = CPSBox
+CPSBar.Position = UDim2.new(0, 12, 0, 24)
+CPSBar.Size = UDim2.new(1, -24, 0, 6)
+CPSBar.BackgroundColor3 = C.bg
+CPSBar.BorderSizePixel = 0
+corner(CPSBar, 3)
+
+local CPSFill = Instance.new("Frame")
+CPSFill.Parent = CPSBar
+CPSFill.Size = UDim2.new((10 - 1) / (50 - 1), 0, 1, 0)
+CPSFill.BackgroundColor3 = C.danger
+CPSFill.BorderSizePixel = 0
+corner(CPSFill, 3)
+gradient(CPSFill, C.warn, C.danger, 0)
+
+local CPSKnob = Instance.new("Frame")
+CPSKnob.Parent = CPSBar
+CPSKnob.Size = UDim2.new(0, 12, 0, 12)
+CPSKnob.Position = UDim2.new((10 - 1) / (50 - 1), 0, 0.5, -6)
+CPSKnob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+CPSKnob.BorderSizePixel = 0
+corner(CPSKnob, 6)
+
+local CPSHit = Instance.new("TextButton")
+CPSHit.Parent = CPSBox
+CPSHit.Size = UDim2.new(1, 0, 1, 0)
+CPSHit.BackgroundTransparency = 1
+CPSHit.Text = ""
+
+local cpsDragging = false
+local function updateCPS(input)
+	local rel = math.clamp((input.Position.X - CPSBar.AbsolutePosition.X) / CPSBar.AbsoluteSize.X, 0, 1)
+	local v = math.floor(1 + (50 - 1) * rel)
+	CPSFill.Size = UDim2.new(rel, 0, 1, 0)
+	CPSKnob.Position = UDim2.new(rel, -6, 0.5, -6)
+	CPSLbl.Text = "CPS: " .. v
+	getgenv().ClickerCPS = v
+end
+CPSHit.InputBegan:Connect(function(i)
+	if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+		cpsDragging = true; updateCPS(i)
+	end
+end)
+CPSHit.InputEnded:Connect(function(i)
+	if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+		cpsDragging = false
+	end
+end)
+UIS.InputChanged:Connect(function(i)
+	if cpsDragging and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then
+		updateCPS(i)
+	end
+end)
+
+local ClickerHint = Instance.new("TextLabel")
+ClickerHint.Parent = ClickerCard
+ClickerHint.Position = UDim2.new(0, 0, 0, 70)
+ClickerHint.Size = UDim2.new(1, 0, 0, 16)
+ClickerHint.BackgroundTransparency = 1
+ClickerHint.Text = "💡 Center = klik tengah layar  •  Mouse = klik posisi mouse sekarang"
+ClickerHint.TextColor3 = C.textMuted
+ClickerHint.Font = Enum.Font.Gotham
+ClickerHint.TextSize = 10
+ClickerHint.TextXAlignment = Enum.TextXAlignment.Left
+
 -- ========== PLAYER LIST ==========
 local ListHeader = Instance.new("Frame")
 ListHeader.Parent = Main
-ListHeader.Position = UDim2.new(0, 20, 0, 306)
+ListHeader.Position = UDim2.new(0, 20, 0, 436)
 ListHeader.Size = UDim2.new(1, -40, 0, 26)
 ListHeader.BackgroundTransparency = 1
 
@@ -490,8 +659,8 @@ BlockCountLbl.TextXAlignment = Enum.TextXAlignment.Right
 
 local ListFrame = Instance.new("Frame")
 ListFrame.Parent = Main
-ListFrame.Position = UDim2.new(0, 20, 0, 336)
-ListFrame.Size = UDim2.new(1, -40, 1, -420)
+ListFrame.Position = UDim2.new(0, 20, 0, 466)
+ListFrame.Size = UDim2.new(1, -40, 1, -550)
 ListFrame.BackgroundColor3 = C.surface
 ListFrame.BorderSizePixel = 0
 corner(ListFrame, 14)
@@ -598,10 +767,9 @@ function refreshPlayerList()
 		row.AutoButtonColor = false
 		corner(row, 10)
 
-		local rowStroke = stroke(row, isTarget and C.accent
+		stroke(row, isTarget and C.accent
 			or (blocked and C.danger or C.stroke), isTarget and 2 or 1)
 
-		-- Avatar
 		local av = Instance.new("Frame")
 		av.Parent = row
 		av.Size = UDim2.new(0, 28, 0, 28)
@@ -619,7 +787,6 @@ function refreshPlayerList()
 		avTxt.Font = Enum.Font.GothamBold
 		avTxt.TextSize = 14
 
-		-- Name
 		local nameLbl = Instance.new("TextLabel")
 		nameLbl.Parent = row
 		nameLbl.Position = UDim2.new(0, 44, 0, 4)
@@ -644,7 +811,6 @@ function refreshPlayerList()
 		dispLbl.TextXAlignment = Enum.TextXAlignment.Left
 		dispLbl.TextTruncate = Enum.TextTruncate.AtEnd
 
-		-- Tag
 		local tag = Instance.new("TextLabel")
 		tag.Parent = row
 		tag.Position = UDim2.new(1, -84, 0, 0)
@@ -709,31 +875,22 @@ function setTargetCard(plr)
 		TargetStroke.Color = C.stroke
 		return
 	end
-
 	local blocked = isBlocked(plr)
-
 	AvatarLbl.Text = plr.Name:sub(1, 1):upper()
 	AvatarLbl.TextColor3 = Color3.fromRGB(255, 255, 255)
 	AvatarBox.BackgroundColor3 = C.accent
-
 	StatusTag.BackgroundColor3 = blocked and C.danger or C.success
 	StatusTagLbl.Text = blocked and "● BLOCKED" or "● FOLLOWING"
-
 	TargetNameLbl.Text = plr.Name
 	TargetNameLbl.TextColor3 = blocked and C.danger or C.text
-
 	TargetSubLbl.Text = "@" .. plr.DisplayName .. "  •  ID " .. plr.UserId
-
 	TargetStroke.Color = blocked and C.danger or C.accent
 end
 
--- Distance updater
 local function updateDistance(dist)
 	local range = 200
 	local fillRel = math.clamp(1 - (dist / range), 0, 1)
 	DistFill.Size = UDim2.new(fillRel, 0, 1, 0)
-
-	-- Change color based on distance
 	if dist <= getgenv().SwitchDist then
 		DistFill.BackgroundColor3 = C.success
 	elseif dist <= getgenv().SwitchDist * 3 then
@@ -742,6 +899,54 @@ local function updateDistance(dist)
 		DistFill.BackgroundColor3 = C.accent2
 	end
 end
+
+-- ========== CLICKER CORE ==========
+local function doClick()
+	local ok = pcall(function()
+		local pos
+		if getgenv().ClickerMode == "Center" then
+			local cam = workspace.CurrentCamera
+			local vp = cam.ViewportSize
+			pos = Vector2.new(vp.X / 2, vp.Y / 2)
+		else
+			pos = UIS:GetMouseLocation()
+		end
+		VIM:SendMouseButtonEvent(pos.X, pos.Y, 0, true, game, 0)
+		VIM:SendMouseButtonEvent(pos.X, pos.Y, 0, false, game, 0)
+	end)
+	if ok then
+		getgenv().ClickerCount = getgenv().ClickerCount + 1
+	end
+end
+
+task.spawn(function()
+	while task.wait(0.1) do
+		if not ScreenGui.Parent then break end
+		if not getgenv().ClickerEnabled then continue end
+		local cps = math.max(1, getgenv().ClickerCPS)
+		local interval = 1 / cps
+		doClick()
+		task.wait(interval)
+	end
+end)
+
+ClickToggleBtn.MouseButton1Click:Connect(function()
+	getgenv().ClickerEnabled = not getgenv().ClickerEnabled
+	updateClickerVisual()
+	if getgenv().ClickerEnabled then
+		log("🖱️  Auto Clicker ON @ " .. getgenv().ClickerCPS .. " CPS", C.danger)
+	else
+		log("🖱️  Auto Clicker OFF", C.warn)
+	end
+end)
+
+-- Update click count label
+task.spawn(function()
+	while task.wait(0.5) do
+		if not ScreenGui.Parent then break end
+		ClickCountLbl.Text = "Clicks: " .. getgenv().ClickerCount
+	end
+end)
 
 -- ========== LIFECYCLE ==========
 Players.PlayerAdded:Connect(function() task.wait(0.5); refreshPlayerList() end)
@@ -755,7 +960,7 @@ Players.PlayerRemoving:Connect(function(plr)
 	refreshPlayerList()
 end)
 
--- ========== CORE ==========
+-- ========== CORE FOLLOW ==========
 local function getHRP()
 	if not LP.Character then return nil end
 	return LP.Character:FindFirstChild("HumanoidRootPart")
@@ -802,16 +1007,13 @@ local function tweenToTarget(targetInfo)
 	local myHRP = getHRP()
 	local hum = getHumanoid()
 	if not myHRP or not hum then return end
-
 	local distance = (myHRP.Position - targetInfo.hrp.Position).Magnitude
 	local duration = distance / getgenv().FollowSpeed
 	if duration < 0.1 then duration = 0.1 end
-
 	hum.PlatformStand = true
 	hum.WalkSpeed = 0
 	hum.JumpPower = 0
 	myHRP.Anchored = true
-
 	local tween = TweenService:Create(
 		myHRP,
 		TweenInfo.new(duration, Enum.EasingStyle.Linear, Enum.EasingDirection.Out),
@@ -819,18 +1021,14 @@ local function tweenToTarget(targetInfo)
 	)
 	getgenv().ActiveTween = tween
 	tween:Play()
-	tween.Completed:Connect(function(state)
+	tween.Completed:Connect(function()
 		if getgenv().ActiveTween == tween then
 			getgenv().ActiveTween = nil
 		end
 	end)
 end
 
--- switch animation
 local function playSwitchFx()
-	local originalSize = TargetCard.Size
-	local originalPos = TargetCard.Position
-	-- flash accent
 	local flash = Instance.new("Frame")
 	flash.Parent = TargetCard
 	flash.Size = UDim2.new(1, 0, 1, 0)
@@ -843,7 +1041,6 @@ local function playSwitchFx()
 	task.delay(0.55, function() flash:Destroy() end)
 end
 
--- ========== MAIN LOOP ==========
 task.spawn(function()
 	while task.wait(0.25) do
 		if not ScreenGui.Parent then break end
@@ -851,12 +1048,9 @@ task.spawn(function()
 
 		local cur = getgenv().CurrentTarget
 		local needNew = false
-		if not cur or not cur.Parent then
-			needNew = true
-		elseif isBlocked(cur) then
-			needNew = true
-		elseif not cur.Character or not cur.Character:FindFirstChild("HumanoidRootPart") then
-			needNew = true
+		if not cur or not cur.Parent then needNew = true
+		elseif isBlocked(cur) then needNew = true
+		elseif not cur.Character or not cur.Character:FindFirstChild("HumanoidRootPart") then needNew = true
 		end
 
 		if needNew then
@@ -882,19 +1076,15 @@ task.spawn(function()
 		local dist = (myHRP.Position - curHRP.Position).Magnitude
 		updateDistance(dist)
 
-		-- 🎯 AUTO SWITCH: kalau udah deket
 		if dist <= getgenv().SwitchDist then
 			getgenv().SwitchCount = getgenv().SwitchCount + 1
-			SwitchLbl.Text = "🔄 Switches: " .. getgenv().SwitchCount
-
-			log("✅ Deket " .. cur.Name .. " (" .. math.floor(dist) .. " studs) → ganti target!", C.success)
+			SwitchLbl.Text = "🔄 " .. getgenv().SwitchCount
+			log("✅ Deket " .. cur.Name .. " → ganti target!", C.success)
 			playSwitchFx()
 			stopTween()
 			getgenv().CurrentTarget = nil
 			setTargetCard(nil)
 			task.wait(0.35)
-
-			-- Langsung pilih target berikutnya
 			local nextInfo = pickNextTarget()
 			if nextInfo then
 				getgenv().CurrentTarget = nextInfo.plr
@@ -904,19 +1094,16 @@ task.spawn(function()
 			continue
 		end
 
-		-- Tween kalau belum jalan
 		if not getgenv().ActiveTween then
 			tweenToTarget({hrp = curHRP, plr = cur})
 		end
 
-		-- Update label jarak
 		if TargetSubLbl then
 			TargetSubLbl.Text = "@" .. cur.DisplayName .. "  •  " .. math.floor(dist) .. " studs"
 		end
 	end
 end)
 
--- Toggle
 ToggleBtn.MouseButton1Click:Connect(function()
 	getgenv().FollowEnabled = not getgenv().FollowEnabled
 	updateToggleVisual()
@@ -930,7 +1117,6 @@ ToggleBtn.MouseButton1Click:Connect(function()
 	end
 end)
 
--- Respawn reset
 LP.CharacterAdded:Connect(function()
 	task.wait(1)
 	stopTween()
@@ -938,9 +1124,9 @@ LP.CharacterAdded:Connect(function()
 	setTargetCard(nil)
 end)
 
--- Init
 refreshPlayerList()
 updateToggleVisual()
+updateClickerVisual()
 setTargetCard(nil)
-log("Siap. Klik Start Follow untuk mulai.", C.textDim)
-print("🎯 Follow Player Pretty Loaded")
+log("Siap. Start Follow / Clicker untuk mulai.", C.textDim)
+print("🎯 Follow Player + Clicker Pretty Loaded")
