@@ -1,125 +1,180 @@
 --[[
-	Mini Website Reader for Roblox (Delta)
-	- Fetch halaman via HttpGet
-	- Extract title, meta, OG tags
-	- Reader mode (text only)
-	- Riwayat URL
+	WEBSITE ANALYZER GUI
+	- Input URL
+	- Fetch + Analyze
+	- Tabs: Info, Meta, Links, Security, Raw
 ]]
 
 local HttpService = game:GetService("HttpService")
 local UIS = game:GetService("UserInputService")
 
+--// State
+local CurrentHTML = ""
+local CurrentURL  = ""
+
 --// GUI
 local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "MiniReader"
+ScreenGui.Name = "WebAnalyzer"
 ScreenGui.Parent = game:GetService("CoreGui")
 ScreenGui.ResetOnSpawn = false
 
-local Frame = Instance.new("Frame")
-Frame.Parent = ScreenGui
-Frame.Size = UDim2.new(0, 520, 0, 600)
-Frame.Position = UDim2.new(0.5, -260, 0.5, -300)
-Frame.BackgroundColor3 = Color3.fromRGB(18, 18, 22)
-Frame.BorderSizePixel = 0
-Frame.Active = true
-Frame.Draggable = true
+local Main = Instance.new("Frame")
+Main.Parent = ScreenGui
+Main.Size = UDim2.new(0, 720, 0, 560)
+Main.Position = UDim2.new(0.5, -360, 0.5, -280)
+Main.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
+Main.BorderSizePixel = 0
+Main.Active = true
+Main.Draggable = true
 
-local Title = Instance.new("TextLabel")
-Title.Parent = Frame
-Title.Size = UDim2.new(1, 0, 0, 32)
-Title.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
-Title.Text = "🌐 Mini Website Reader"
-Title.TextColor3 = Color3.fromRGB(0, 255, 120)
-Title.Font = Enum.Font.SourceSansBold
-Title.TextSize = 16
-Title.BorderSizePixel = 0
+local TitleBar = Instance.new("Frame")
+TitleBar.Parent = Main
+TitleBar.Size = UDim2.new(1, 0, 0, 34)
+TitleBar.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+TitleBar.BorderSizePixel = 0
 
--- URL Input
+local TitleLbl = Instance.new("TextLabel")
+TitleLbl.Parent = TitleBar
+TitleLbl.Size = UDim2.new(1, -40, 1, 0)
+TitleLbl.Position = UDim2.new(0, 12, 0, 0)
+TitleLbl.BackgroundTransparency = 1
+TitleLbl.Text = "🔍 Website Analyzer"
+TitleLbl.TextColor3 = Color3.fromRGB(0, 220, 255)
+TitleLbl.Font = Enum.Font.SourceSansBold
+TitleLbl.TextSize = 16
+TitleLbl.TextXAlignment = Enum.TextXAlignment.Left
+
+local CloseBtn = Instance.new("TextButton")
+CloseBtn.Parent = TitleBar
+CloseBtn.Size = UDim2.new(0, 26, 0, 26)
+CloseBtn.Position = UDim2.new(1, -30, 0, 4)
+CloseBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+CloseBtn.BorderSizePixel = 0
+CloseBtn.Text = "X"
+CloseBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+CloseBtn.Font = Enum.Font.SourceSansBold
+CloseBtn.TextSize = 14
+CloseBtn.MouseButton1Click:Connect(function() ScreenGui:Destroy() end)
+
+-- URL Bar
+local UrlBar = Instance.new("Frame")
+UrlBar.Parent = Main
+UrlBar.Size = UDim2.new(1, -20, 0, 40)
+UrlBar.Position = UDim2.new(0, 10, 0, 44)
+UrlBar.BackgroundColor3 = Color3.fromRGB(22, 22, 30)
+UrlBar.BorderSizePixel = 0
+
 local UrlBox = Instance.new("TextBox")
-UrlBox.Parent = Frame
-UrlBox.Size = UDim2.new(1, -100, 0, 32)
-UrlBox.Position = UDim2.new(0, 10, 0, 42)
-UrlBox.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
+UrlBox.Parent = UrlBar
+UrlBox.Size = UDim2.new(1, -120, 1, -8)
+UrlBox.Position = UDim2.new(0, 4, 0, 4)
+UrlBox.BackgroundColor3 = Color3.fromRGB(30, 30, 42)
 UrlBox.BorderSizePixel = 0
 UrlBox.Text = ""
-UrlBox.PlaceholderText = "https://example.com atau paste URL..."
+UrlBox.PlaceholderText = "https://example.com"
 UrlBox.TextColor3 = Color3.fromRGB(255, 255, 255)
-UrlBox.PlaceholderColor3 = Color3.fromRGB(120, 120, 130)
+UrlBox.PlaceholderColor3 = Color3.fromRGB(110, 110, 130)
 UrlBox.Font = Enum.Font.Code
-UrlBox.TextSize = 13
+UrlBox.TextSize = 14
 UrlBox.ClearTextOnFocus = false
 UrlBox.TextXAlignment = Enum.TextXAlignment.Left
-UrlBox.TextScaled = false
+UrlBox.TextTruncate = Enum.TextTruncate.AtEnd
 
-local GoBtn = Instance.new("TextButton")
-GoBtn.Parent = Frame
-GoBtn.Size = UDim2.new(0, 80, 0, 32)
-GoBtn.Position = UDim2.new(1, -90, 0, 42)
-GoBtn.BackgroundColor3 = Color3.fromRGB(0, 130, 80)
-GoBtn.BorderSizePixel = 0
-GoBtn.Text = "🔍 Fetch"
-GoBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-GoBtn.Font = Enum.Font.SourceSansBold
-GoBtn.TextSize = 13
+local AnalyzeBtn = Instance.new("TextButton")
+AnalyzeBtn.Parent = UrlBar
+AnalyzeBtn.Size = UDim2.new(0, 110, 1, -8)
+AnalyzeBtn.Position = UDim2.new(1, -114, 0, 4)
+AnalyzeBtn.BackgroundColor3 = Color3.fromRGB(0, 140, 90)
+AnalyzeBtn.BorderSizePixel = 0
+AnalyzeBtn.Text = "⚡ ANALYZE"
+AnalyzeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+AnalyzeBtn.Font = Enum.Font.SourceSansBold
+AnalyzeBtn.TextSize = 13
 
--- Toggle Reader Mode
-local ReaderToggle = Instance.new("TextButton")
-ReaderToggle.Parent = Frame
-ReaderToggle.Size = UDim2.new(0, 150, 0, 24)
-ReaderToggle.Position = UDim2.new(0, 10, 0, 80)
-ReaderToggle.BackgroundColor3 = Color3.fromRGB(50, 50, 60)
-ReaderToggle.BorderSizePixel = 0
-ReaderToggle.Text = "📖 Reader Mode: OFF"
-ReaderToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
-ReaderToggle.Font = Enum.Font.SourceSans
-ReaderToggle.TextSize = 12
+-- Status bar
+local Status = Instance.new("TextLabel")
+Status.Parent = Main
+Status.Size = UDim2.new(1, -20, 0, 20)
+Status.Position = UDim2.new(0, 10, 0, 90)
+Status.BackgroundTransparency = 1
+Status.Text = "Ready. Masukkan URL & klik ANALYZE."
+Status.TextColor3 = Color3.fromRGB(0, 220, 255)
+Status.Font = Enum.Font.Code
+Status.TextSize = 12
+Status.TextXAlignment = Enum.TextXAlignment.Left
 
-local ReaderMode = false
-ReaderToggle.MouseButton1Click:Connect(function()
-	ReaderMode = not ReaderMode
-	ReaderToggle.Text = "📖 Reader Mode: " .. (ReaderMode and "ON" or "OFF")
-	ReaderToggle.BackgroundColor3 = ReaderMode and Color3.fromRGB(0, 130, 80) or Color3.fromRGB(50, 50, 60)
-end)
+-- Tabs
+local TabBar = Instance.new("Frame")
+TabBar.Parent = Main
+TabBar.Size = UDim2.new(1, -20, 0, 28)
+TabBar.Position = UDim2.new(0, 10, 0, 116)
+TabBar.BackgroundColor3 = Color3.fromRGB(22, 22, 30)
+TabBar.BorderSizePixel = 0
 
--- Status
-local StatusLbl = Instance.new("TextLabel")
-StatusLbl.Parent = Frame
-StatusLbl.Size = UDim2.new(1, -20, 0, 20)
-StatusLbl.Position = UDim2.new(0, 10, 0, 108)
-StatusLbl.BackgroundTransparency = 1
-StatusLbl.Text = "Ready. Paste URL & klik Fetch."
-StatusLbl.TextColor3 = Color3.fromRGB(0, 255, 120)
-StatusLbl.Font = Enum.Font.Code
-StatusLbl.TextSize = 12
-StatusLbl.TextXAlignment = Enum.TextXAlignment.Left
+local tabs = {}
+local tabNames = {"📋 Info", "🏷️ Meta", "🔗 Links", "🖼️ Images", "🔒 Security", "📜 Raw"}
+local activeTab = nil
 
--- Output area
-local OutputFrame = Instance.new("Frame")
-OutputFrame.Parent = Frame
-OutputFrame.Position = UDim2.new(0, 10, 0, 132)
-OutputFrame.Size = UDim2.new(1, -20, 1, -145)
-OutputFrame.BackgroundColor3 = Color3.fromRGB(10, 10, 14)
-OutputFrame.BorderSizePixel = 0
+-- Content area
+local Content = Instance.new("Frame")
+Content.Parent = Main
+Content.Size = UDim2.new(1, -20, 1, -160)
+Content.Position = UDim2.new(0, 10, 0, 150)
+Content.BackgroundColor3 = Color3.fromRGB(10, 10, 14)
+Content.BorderSizePixel = 0
 
 local Scrolling = Instance.new("ScrollingFrame")
-Scrolling.Parent = OutputFrame
+Scrolling.Parent = Content
 Scrolling.Size = UDim2.new(1, -8, 1, -8)
 Scrolling.Position = UDim2.new(0, 4, 0, 4)
 Scrolling.BackgroundTransparency = 1
 Scrolling.BorderSizePixel = 0
-Scrolling.ScrollBarThickness = 6
+Scrolling.ScrollBarThickness = 8
 Scrolling.CanvasSize = UDim2.new(0, 0, 0, 0)
 Scrolling.AutomaticCanvasSize = Enum.AutomaticSize.Y
 
 local Layout = Instance.new("UIListLayout")
 Layout.Parent = Scrolling
 Layout.SortOrder = Enum.SortOrder.LayoutOrder
-Layout.Padding = UDim.new(0, 4)
+Layout.Padding = UDim.new(0, 3)
 
-local function addBlock(text, color, size)
+-- Tab creator
+local function createTab(name, index)
+	local btn = Instance.new("TextButton")
+	btn.Parent = TabBar
+	btn.Size = UDim2.new(1/#tabNames, -4, 1, -6)
+	btn.Position = UDim2.new((index-1)/#tabNames, 2, 0, 3)
+	btn.BackgroundColor3 = Color3.fromRGB(35, 35, 48)
+	btn.BorderSizePixel = 0
+	btn.Text = name
+	btn.TextColor3 = Color3.fromRGB(180, 180, 200)
+	btn.Font = Enum.Font.SourceSansBold
+	btn.TextSize = 11
+	btn.MouseButton1Click:Connect(function()
+		activeTab = name
+		for _, t in pairs(tabs) do
+			t.btn.BackgroundColor3 = Color3.fromRGB(35, 35, 48)
+			t.btn.TextColor3 = Color3.fromRGB(180, 180, 200)
+		end
+		btn.BackgroundColor3 = Color3.fromRGB(0, 140, 90)
+		btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+		renderTab(name)
+	end)
+	tabs[name] = {btn = btn}
+	return btn
+end
+
+-- Log / render helpers
+local function clearContent()
+	for _, c in ipairs(Scrolling:GetChildren()) do
+		if c:IsA("TextLabel") or c:IsA("Frame") then c:Destroy() end
+	end
+end
+
+local function addLine(text, color, size)
 	local lbl = Instance.new("TextLabel")
 	lbl.Parent = Scrolling
-	lbl.Size = UDim2.new(1, -4, 0, size or 20)
+	lbl.Size = UDim2.new(1, -8, 0, size or 18)
 	lbl.BackgroundTransparency = 1
 	lbl.Text = text
 	lbl.TextColor3 = color or Color3.fromRGB(220, 220, 220)
@@ -132,168 +187,406 @@ local function addBlock(text, color, size)
 	return lbl
 end
 
-local function clearOutput()
-	for _, c in ipairs(Scrolling:GetChildren()) do
-		if c:IsA("TextLabel") then c:Destroy() end
-	end
+local function addHeader(text)
+	local lbl = Instance.new("TextLabel")
+	lbl.Parent = Scrolling
+	lbl.Size = UDim2.new(1, -8, 0, 22)
+	lbl.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+	lbl.BorderSizePixel = 0
+	lbl.Text = "  " .. text
+	lbl.TextColor3 = Color3.fromRGB(0, 220, 255)
+	lbl.Font = Enum.Font.SourceSansBold
+	lbl.TextSize = 13
+	lbl.TextXAlignment = Enum.TextXAlignment.Left
+	return lbl
 end
 
-local function setStatus(txt, color)
-	StatusLbl.Text = txt
-	StatusLbl.TextColor3 = color or Color3.fromRGB(0, 255, 120)
+local function addKeyValue(key, value, valColor)
+	local frame = Instance.new("Frame")
+	frame.Parent = Scrolling
+	frame.Size = UDim2.new(1, -8, 0, 18)
+	frame.BackgroundTransparency = 1
+
+	local k = Instance.new("TextLabel")
+	k.Parent = frame
+	k.Size = UDim2.new(0.28, 0, 1, 0)
+	k.BackgroundTransparency = 1
+	k.Text = key
+	k.TextColor3 = Color3.fromRGB(150, 180, 220)
+	k.Font = Enum.Font.Code
+	k.TextSize = 12
+	k.TextXAlignment = Enum.TextXAlignment.Left
+
+	local v = Instance.new("TextLabel")
+	v.Parent = frame
+	v.Size = UDim2.new(0.72, 0, 1, 0)
+	v.Position = UDim2.new(0.28, 0, 0, 0)
+	v.BackgroundTransparency = 1
+	v.Text = tostring(value)
+	v.TextColor3 = valColor or Color3.fromRGB(230, 230, 230)
+	v.Font = Enum.Font.Code
+	v.TextSize = 12
+	v.TextXAlignment = Enum.TextXAlignment.Left
+	v.TextTruncate = Enum.TextTruncate.AtEnd
+	return frame
 end
 
---// HTML Helpers
+-- HTML helpers
 local function stripTags(html)
-	local txt = html
-	txt = txt:gsub("<script[^>]*>.-</script>", "")
-	txt = txt:gsub("<style[^>]*>.-</style>", "")
-	txt = txt:gsub("<[^>]->", " ")
-	txt = txt:gsub("&nbsp;", " ")
-	txt = txt:gsub("&amp;", "&")
-	txt = txt:gsub("&lt;", "<")
-	txt = txt:gsub("&gt;", ">")
-	txt = txt:gsub("&quot;", '"')
-	txt = txt:gsub("&#39;", "'")
-	txt = txt:gsub("%s+", " ")
-	return txt
+	local t = html
+	t = t:gsub("<script[^>]*>.-</script>", "")
+	t = t:gsub("<style[^>]*>.-</style>", "")
+	t = t:gsub("<!--.-", "")
+	t = t:gsub("<[^>]->", " ")
+	t = t:gsub("&nbsp;", " "):gsub("&amp;", "&"):gsub("&lt;", "<"):gsub("&gt;", ">")
+	t = t:gsub("&quot;", '"'):gsub("&#39;", "'")
+	t = t:gsub("%s+", " ")
+	return t
 end
 
-local function extractMeta(html, prop)
-	-- Cari <meta property="prop" content="...">
-	local pattern = '<meta[^>]*property="' .. prop .. '"[^>]*content="([^"]*)"'
-	local val = html:match(pattern)
-	if not val then
-		-- Coba urutan terbalik
-		pattern = '<meta[^>]*content="([^"]*)"[^>]*property="' .. prop .. '"'
-		val = html:match(pattern)
-	end
-	return val
+local function getMeta(html, attr, value)
+	local p1 = '<meta[^>]*' .. attr .. '="' .. value .. '"[^>]*content="([^"]*)"'
+	local p2 = '<meta[^>]*content="([^"]*)"[^>]*' .. attr .. '="' .. value .. '"'
+	return html:match(p1) or html:match(p2)
 end
 
-local function extractName(html, name)
-	local pattern = '<meta[^>]*name="' .. name .. '"[^>]*content="([^"]*)"'
-	local val = html:match(pattern)
-	if not val then
-		pattern = '<meta[^>]*content="([^"]*)"[^>]*name="' .. name .. '"'
-		val = html:match(pattern)
-	end
-	return val
+local function countMatches(str, pattern)
+	local c = 0
+	for _ in str:gmatch(pattern) do c = c + 1 end
+	return c
 end
 
---// FETCH FUNCTION
-local function fetchWebsite(url)
-	if url == "" or not url:match("^https?://") then
-		setStatus("❌ URL harus mulai dengan http:// atau https://", Color3.fromRGB(255, 80, 80))
-		return
-	end
-
-	setStatus("⏳ Fetching... " .. url:sub(1, 40), Color3.fromRGB(255, 200, 0))
-	clearOutput()
-
-	local ok, html = pcall(function()
-		return game:HttpGet(url, true)
-	end)
-
-	if not ok or not html then
-		setStatus("❌ Gagal fetch (HttpGet error)", Color3.fromRGB(255, 80, 80))
-		addBlock("❌ Error: " .. tostring(html), Color3.fromRGB(255, 100, 100))
-		return
-	end
-
-	addBlock("✅ Berhasil fetch (" .. #html .. " bytes)", Color3.fromRGB(0, 255, 120))
-
-	-- Extract info
-	local title = html:match("<title[^>]*>([^<]*)</title>") or "No title"
-	local desc = extractName(html, "description") or extractMeta(html, "og:description") or "-"
-	local ogTitle = extractMeta(html, "og:title") or "-"
-	local ogImage = extractMeta(html, "og:image") or "-"
-	local ogUrl = extractMeta(html, "og:url") or "-"
-	local ogType = extractMeta(html, "og:type") or "-"
-
-	addBlock("━━━ 📄 PAGE INFO ━━━", Color3.fromRGB(0, 200, 255))
-	addBlock("📌 Title: " .. title, Color3.fromRGB(255, 255, 255))
-	addBlock("📝 Description: " .. desc, Color3.fromRGB(200, 200, 200))
-
-	addBlock("━━━ 🌐 OPEN GRAPH ━━━", Color3.fromRGB(0, 200, 255))
-	addBlock("OG Title: " .. ogTitle, Color3.fromRGB(200, 220, 255))
-	addBlock("OG Type: " .. ogType, Color3.fromRGB(200, 220, 255))
-	addBlock("OG URL: " .. ogUrl, Color3.fromRGB(200, 220, 255))
-	addBlock("OG Image: " .. ogImage, Color3.fromRGB(200, 220, 255))
-
-	-- Reader mode
-	if ReaderMode then
-		addBlock("━━━ 📖 READER MODE ━━━", Color3.fromRGB(0, 255, 120))
-		local plain = stripTags(html)
-		-- Potong biar nggak kepanjangan
-		if #plain > 3000 then plain = plain:sub(1, 3000) .. "... [dipotong]" end
-		addBlock(plain, Color3.fromRGB(220, 220, 220))
-	else
-		-- Raw preview
-		addBlock("━━━ 📜 RAW HTML (preview) ━━━", Color3.fromRGB(255, 200, 0))
-		local preview = html:sub(1, 1500)
-		addBlock(preview, Color3.fromRGB(180, 180, 180))
-	end
-
-	setStatus("✅ Selesai! " .. #html .. " bytes", Color3.fromRGB(0, 255, 120))
+local function collectMatches(str, pattern)
+	local list = {}
+	for m in str:gmatch(pattern) do table.insert(list, m) end
+	return list
 end
 
-GoBtn.MouseButton1Click:Connect(function()
-	fetchWebsite(UrlBox.Text)
-end)
-
-UrlBox.FocusLost:Connect(function(enter)
-	if enter then fetchWebsite(UrlBox.Text) end
-end)
-
---// Quick link examples
-local QuickFrame = Instance.new("Frame")
-QuickFrame.Parent = Frame
-QuickFrame.Position = UDim2.new(0, 170, 0, 80)
-QuickFrame.Size = UDim2.new(1, -180, 0, 24)
-QuickFrame.BackgroundTransparency = 1
-
-local quickUrls = {
-	{label = "Roblox", url = "https://www.roblox.com"},
-	{label = "GitHub", url = "https://github.com"},
-	{label = "Example", url = "https://example.com"},
-	{label = "ipify", url = "https://api.ipify.org"},
+-- Analysis results store
+local Analysis = {
+	url = "",
+	html = "",
+	bytes = 0,
+	title = "",
+	desc = "",
+	keywords = "",
+	author = "",
+	lang = "",
+	charset = "",
+	ogTitle = "",
+	ogDesc = "",
+	ogImage = "",
+	ogUrl = "",
+	ogType = "",
+	ogSite = "",
+	twCard = "",
+	twTitle = "",
+	twDesc = "",
+	twImage = "",
+	links = {},
+	images = {},
+	scripts = {},
+	styles = {},
+	forms = 0,
+	h1 = 0, h2 = 0, h3 = 0,
+	paragraphs = 0,
+	hasViewport = false,
+	hasFavicon = false,
+	hasCanonical = false,
+	hasRobots = false,
+	isHttps = false,
+	server = "",
+	contentType = "",
+	inlineScripts = 0,
+	inlineStyles = 0,
+	externalDomains = {},
 }
 
-local xPos = 0
-for _, q in ipairs(quickUrls) do
-	local b = Instance.new("TextButton")
-	b.Parent = QuickFrame
-	b.Size = UDim2.new(0, 70, 0, 24)
-	b.Position = UDim2.new(0, xPos, 0, 0)
-	b.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
-	b.BorderSizePixel = 0
-	b.Text = q.label
-	b.TextColor3 = Color3.fromRGB(200, 220, 255)
-	b.Font = Enum.Font.SourceSans
-	b.TextSize = 11
-	b.MouseButton1Click:Connect(function()
-		UrlBox.Text = q.url
-		fetchWebsite(q.url)
-	end)
-	xPos = xPos + 75
+-- Parser
+local function analyzeHTML(url, html)
+	local a = Analysis
+	a.url = url
+	a.html = html
+	a.bytes = #html
+	a.isHttps = url:sub(1, 6) == "https:"
+
+	a.title = html:match("<title[^>]*>([^<]*)</title>") or ""
+	a.desc = getMeta(html, "name", "description") or ""
+	a.keywords = getMeta(html, "name", "keywords") or ""
+	a.author = getMeta(html, "name", "author") or ""
+	a.lang = html:match('<html[^>]*lang="([^"]*)"') or ""
+	a.charset = html:match('<meta[^>]*charset="([^"]*)"') or html:match('charset=([%w%-]+)') or ""
+
+	a.ogTitle = getMeta(html, "property", "og:title") or ""
+	a.ogDesc = getMeta(html, "property", "og:description") or ""
+	a.ogImage = getMeta(html, "property", "og:image") or ""
+	a.ogUrl = getMeta(html, "property", "og:url") or ""
+	a.ogType = getMeta(html, "property", "og:type") or ""
+	a.ogSite = getMeta(html, "property", "og:site_name") or ""
+
+	a.twCard = getMeta(html, "name", "twitter:card") or ""
+	a.twTitle = getMeta(html, "name", "twitter:title") or ""
+	a.twDesc = getMeta(html, "name", "twitter:description") or ""
+	a.twImage = getMeta(html, "name", "twitter:image") or ""
+
+	a.links = collectMatches(html, '<a[^>]*href="([^"]*)"')
+	a.images = collectMatches(html, '<img[^>]*src="([^"]*)"')
+	a.scripts = collectMatches(html, '<script[^>]*src="([^"]*)"')
+	a.styles = collectMatches(html, '<link[^>]*rel="stylesheet"[^>]*href="([^"]*)"')
+
+	a.forms = countMatches(html, "<form")
+	a.h1 = countMatches(html, "<h1")
+	a.h2 = countMatches(html, "<h2")
+	a.h3 = countMatches(html, "<h3")
+	a.paragraphs = countMatches(html, "<p[ >]")
+	a.inlineScripts = countMatches(html, "<script[^>]*>") - #a.scripts
+	a.inlineStyles = countMatches(html, "<style[^>]*>")
+
+	a.hasViewport = html:find('name="viewport"', 1, true) ~= nil
+	a.hasFavicon = html:find('rel="icon"', 1, true) ~= nil or html:find('rel="shortcut icon"', 1, true) ~= nil
+	a.hasCanonical = html:find('rel="canonical"', 1, true) ~= nil
+	a.hasRobots = html:find('name="robots"', 1, true) ~= nil
+
+	-- Extract server headers (bisa dari comment atau meta)
+	a.server = html:match("Server: ([^\r\n]+)") or "-"
+	a.contentType = html:match("Content%-Type: ([^\r\n]+)") or "-"
+
+	-- Domains
+	local domains = {}
+	for _, link in ipairs(a.links) do
+		local d = link:match("^https?://([^/]+)")
+		if d and not d:find(url:match("^https?://([^/]+)") or "", 1, true) then
+			domains[d] = true
+		end
+	end
+	for d in pairs(domains) do table.insert(a.externalDomains, d) end
+	table.sort(a.externalDomains)
 end
 
---// Close
-local CloseBtn = Instance.new("TextButton")
-CloseBtn.Parent = Frame
-CloseBtn.Size = UDim2.new(0, 24, 0, 24)
-CloseBtn.Position = UDim2.new(1, -30, 0, 4)
-CloseBtn.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
-CloseBtn.BorderSizePixel = 0
-CloseBtn.Text = "X"
-CloseBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-CloseBtn.Font = Enum.Font.SourceSansBold
-CloseBtn.TextSize = 14
-CloseBtn.MouseButton1Click:Connect(function()
-	ScreenGui:Destroy()
-	print("🌐 Mini Reader closed")
+-- Render per tab
+function renderTab(name)
+	clearContent()
+
+	if not Analysis.html or Analysis.html == "" then
+		addLine("Belum ada data. Fetch URL dulu.", Color3.fromRGB(255, 180, 0))
+		return
+	end
+
+	local a = Analysis
+
+	if name == "📋 Info" then
+		addHeader("📋 PAGE OVERVIEW")
+		addKeyValue("URL", a.url, Color3.fromRGB(0, 220, 255))
+		addKeyValue("HTTPS", a.isHttps and "✅ Ya" or "❌ Tidak", a.isHttps and Color3.fromRGB(0, 255, 100) or Color3.fromRGB(255, 100, 100))
+		addKeyValue("Size", a.bytes .. " bytes (" .. string.format("%.2f", a.bytes/1024) .. " KB)")
+		addKeyValue("Title", a.title ~= "" and a.title or "(kosong)", a.title ~= "" and Color3.fromRGB(230,230,230) or Color3.fromRGB(255,100,100))
+		addKeyValue("Description", a.desc ~= "" and a.desc or "(kosong)", a.desc ~= "" and Color3.fromRGB(200,200,200) or Color3.fromRGB(255,100,100))
+		addKeyValue("Lang", a.lang ~= "" and a.lang or "(tidak set)")
+		addKeyValue("Charset", a.charset ~= "" and a.charset or "(tidak set)")
+
+		addHeader("📐 STRUKTUR")
+		addKeyValue("H1", a.h1, a.h1 == 1 and Color3.fromRGB(0,255,100) or Color3.fromRGB(255,200,0))
+		addKeyValue("H2", a.h2)
+		addKeyValue("H3", a.h3)
+		addKeyValue("Paragraphs", a.paragraphs)
+		addKeyValue("Forms", a.forms)
+		addKeyValue("Links", #a.links)
+		addKeyValue("Images", #a.images)
+		addKeyValue("Scripts (external)", #a.scripts)
+		addKeyValue("Scripts (inline)", a.inlineScripts)
+		addKeyValue("Stylesheets", #a.styles)
+
+	elseif name == "🏷️ Meta" then
+		addHeader("📌 BASIC META")
+		addKeyValue("Title", a.title ~= "" and a.title or "(kosong)")
+		addKeyValue("Description", a.desc ~= "" and a.desc or "(kosong)")
+		addKeyValue("Keywords", a.keywords ~= "" and a.keywords or "(kosong)")
+		addKeyValue("Author", a.author ~= "" and a.author or "(kosong)")
+
+		addHeader("🌐 OPEN GRAPH")
+		addKeyValue("og:title", a.ogTitle ~= "" and a.ogTitle or "(kosong)")
+		addKeyValue("og:description", a.ogDesc ~= "" and a.ogDesc or "(kosong)")
+		addKeyValue("og:type", a.ogType ~= "" and a.ogType or "(kosong)")
+		addKeyValue("og:url", a.ogUrl ~= "" and a.ogUrl or "(kosong)")
+		addKeyValue("og:image", a.ogImage ~= "" and a.ogImage or "(kosong)")
+		addKeyValue("og:site_name", a.ogSite ~= "" and a.ogSite or "(kosong)")
+
+		addHeader("🐦 TWITTER CARD")
+		addKeyValue("twitter:card", a.twCard ~= "" and a.twCard or "(kosong)")
+		addKeyValue("twitter:title", a.twTitle ~= "" and a.twTitle or "(kosong)")
+		addKeyValue("twitter:description", a.twDesc ~= "" and a.twDesc or "(kosong)")
+		addKeyValue("twitter:image", a.twImage ~= "" and a.twImage or "(kosong)")
+
+	elseif name == "🔗 Links" then
+		addHeader("🔗 LINKS (" .. #a.links .. ")")
+		if #a.links == 0 then addLine("  (tidak ada link)", Color3.fromRGB(150,150,150)) end
+		for i = 1, math.min(80, #a.links) do
+			local link = a.links[i]
+			local color = link:match("^https?://") and Color3.fromRGB(0,220,255) or Color3.fromRGB(200,200,200)
+			addLine("  " .. i .. ". " .. link, color)
+		end
+		if #a.links > 80 then addLine("  ... +" .. (#a.links - 80) .. " link lagi", Color3.fromRGB(150,150,150)) end
+
+		addHeader("🌍 DOMAIN EKSTERNAL (" .. #a.externalDomains .. ")")
+		for _, d in ipairs(a.externalDomains) do
+			addLine("  • " .. d, Color3.fromRGB(255, 200, 0))
+		end
+
+	elseif name == "🖼️ Images" then
+		addHeader("🖼️ IMAGES (" .. #a.images .. ")")
+		if #a.images == 0 then addLine("  (tidak ada image)", Color3.fromRGB(150,150,150)) end
+		for i = 1, math.min(60, #a.images) do
+			addLine("  " .. i .. ". " .. a.images[i], Color3.fromRGB(200, 180, 255))
+		end
+		if #a.images > 60 then addLine("  ... +" .. (#a.images - 60) .. " image lagi", Color3.fromRGB(150,150,150)) end
+
+		addHeader("📜 SCRIPTS (" .. #a.scripts .. ")")
+		for i = 1, math.min(40, #a.scripts) do
+			addLine("  " .. i .. ". " .. a.scripts[i], Color3.fromRGB(255, 180, 100))
+		end
+
+		addHeader("🎨 STYLESHEETS (" .. #a.styles .. ")")
+		for i = 1, math.min(30, #a.styles) do
+			addLine("  " .. i .. ". " .. a.styles[i], Color3.fromRGB(100, 220, 180))
+		end
+
+	elseif name == "🔒 Security" then
+		addHeader("🔒 SECURITY CHECK")
+		addKeyValue("HTTPS", a.isHttps and "✅ Ya" or "❌ Tidak", a.isHttps and Color3.fromRGB(0,255,100) or Color3.fromRGB(255,100,100))
+		addKeyValue("Viewport meta", a.hasViewport and "✅ Ada" or "❌ Tidak", a.hasViewport and Color3.fromRGB(0,255,100) or Color3.fromRGB(255,200,0))
+		addKeyValue("Favicon", a.hasFavicon and "✅ Ada" or "❌ Tidak", a.hasFavicon and Color3.fromRGB(0,255,100) or Color3.fromRGB(255,200,0))
+		addKeyValue("Canonical URL", a.hasCanonical and "✅ Ada" or "❌ Tidak", a.hasCanonical and Color3.fromRGB(0,255,100) or Color3.fromRGB(255,200,0))
+		addKeyValue("Robots meta", a.hasRobots and "✅ Ada" or "❌ Tidak")
+		addKeyValue("Server Header", a.server)
+		addKeyValue("Content-Type", a.contentType)
+
+		addHeader("⚠️ WARNING")
+		local warns = 0
+		if not a.isHttps then addLine("  ⚠️ Situs tidak pakai HTTPS!", Color3.fromRGB(255,100,100)); warns = warns + 1 end
+		if not a.hasViewport then addLine("  ⚠️ Tidak ada viewport meta (jelek di mobile)", Color3.fromRGB(255,200,0)); warns = warns + 1 end
+		if a.title == "" then addLine("  ⚠️ Tidak ada title tag", Color3.fromRGB(255,200,0)); warns = warns + 1 end
+		if a.desc == "" then addLine("  ⚠️ Tidak ada meta description", Color3.fromRGB(255,200,0)); warns = warns + 1 end
+		if a.h1 == 0 then addLine("  ⚠️ Tidak ada tag H1", Color3.fromRGB(255,200,0)); warns = warns + 1 end
+		if a.h1 > 1 then addLine("  ⚠️ Ada " .. a.h1 .. " tag H1 (sebaiknya 1)", Color3.fromRGB(255,200,0)); warns = warns + 1 end
+		if warns == 0 then addLine("  ✅ Tidak ada warning", Color3.fromRGB(0,255,100)) end
+
+	elseif name == "📜 Raw" then
+		addHeader("📜 RAW HTML (" .. a.bytes .. " bytes)")
+		local preview = a.html:sub(1, 8000)
+		addLine(preview, Color3.fromRGB(180,180,180))
+		if a.bytes > 8000 then
+			addLine("... [dipotong, " .. (a.bytes - 8000) .. " bytes lagi]", Color3.fromRGB(255,200,0))
+		end
+	end
+end
+
+-- Main fetch
+local function fetchAndAnalyze(url)
+	if url == "" then
+		Status.Text = "❌ URL kosong!"
+		Status.TextColor3 = Color3.fromRGB(255, 100, 100)
+		return
+	end
+	if not url:match("^https?://") then
+		url = "https://" .. url
+		UrlBox.Text = url
+	end
+
+	Status.Text = "⏳ Fetching " .. url:sub(1, 60) .. "..."
+	Status.TextColor3 = Color3.fromRGB(255, 200, 0)
+	clearContent()
+	addLine("⏳ Sedang fetch...", Color3.fromRGB(255, 200, 0))
+
+	task.spawn(function()
+		local ok, html = pcall(function()
+			return game:HttpGet(url, true)
+		end)
+
+		if not ok or not html or html == "" then
+			Status.Text = "❌ Gagal fetch (error/timeout)"
+			Status.TextColor3 = Color3.fromRGB(255, 100, 100)
+			clearContent()
+			addLine("❌ Gagal fetch URL ini.", Color3.fromRGB(255, 100, 100))
+			addLine("Error: " .. tostring(html), Color3.fromRGB(255, 150, 150))
+			return
+		end
+
+		analyzeHTML(url, html)
+
+		Status.Text = string.format("✅ %s — %d bytes", url:sub(1, 50), #html)
+		Status.TextColor3 = Color3.fromRGB(0, 255, 120)
+
+		-- Auto switch ke Info
+		if activeTab then
+			renderTab(activeTab)
+		else
+			renderTab("📋 Info")
+		end
+	end)
+end
+
+AnalyzeBtn.MouseButton1Click:Connect(function()
+	fetchAndAnalyze(UrlBox.Text)
+end)
+UrlBox.FocusLost:Connect(function(enter)
+	if enter then fetchAndAnalyze(UrlBox.Text) end
 end)
 
-print("🌐 Mini Website Reader Loaded")
-print("Tip: coba fetch https://api.ipify.org atau https://example.com")
+-- Create tabs
+for i, name in ipairs(tabNames) do
+	createTab(name, i)
+end
+activeTab = "📋 Info"
+tabs["📋 Info"].btn.BackgroundColor3 = Color3.fromRGB(0, 140, 90)
+tabs["📋 Info"].btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+
+-- Quick examples
+local QuickBar = Instance.new("Frame")
+QuickBar.Parent = Main
+QuickBar.Size = UDim2.new(1, -20, 0, 22)
+QuickBar.Position = UDim2.new(0, 10, 0, 128)
+QuickBar.BackgroundTransparency = 1
+
+local examples = {
+	{label = "example.com", url = "https://example.com"},
+	{label = "github.com", url = "https://github.com"},
+	{label = "roblox.com", url = "https://www.roblox.com"},
+	{label = "wikipedia", url = "https://en.wikipedia.org/wiki/Roblox"},
+	{label = "httpbin", url = "https://httpbin.org/html"},
+}
+
+local xOff = 0
+for _, ex in ipairs(examples) do
+	local b = Instance.new("TextButton")
+	b.Parent = QuickBar
+	b.Size = UDim2.new(0, 100, 1, 0)
+	b.Position = UDim2.new(0, xOff, 0, 0)
+	b.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+	b.BorderSizePixel = 0
+	b.Text = ex.label
+	b.TextColor3 = Color3.fromRGB(180, 200, 255)
+	b.Font = Enum.Font.Code
+	b.TextSize = 11
+	b.MouseButton1Click:Connect(function()
+		UrlBox.Text = ex.url
+		fetchAndAnalyze(ex.url)
+	end)
+	xOff = xOff + 104
+end
+
+-- Initial render
+clearContent()
+addLine("🔍 Website Analyzer siap.", Color3.fromRGB(0, 220, 255))
+addLine("", Color3.fromRGB(0, 0, 0))
+addLine("Cara pakai:", Color3.fromRGB(200, 200, 200))
+addLine("  1. Paste URL di kolom atas", Color3.fromRGB(180, 180, 180))
+addLine("  2. Klik ⚡ ANALYZE (atau Enter)", Color3.fromRGB(180, 180, 180))
+addLine("  3. Lihat hasil per tab:", Color3.fromRGB(180, 180, 180))
+addLine("     • 📋 Info   — overview + struktur", Color3.fromRGB(180, 180, 180))
+addLine("     • 🏷️ Meta   — OG & Twitter Card", Color3.fromRGB(180, 180, 180))
+addLine("     • 🔗 Links  — semua link + domain luar", Color3.fromRGB(180, 180, 180))
+addLine("     • 🖼️ Images — gambar, script, stylesheet", Color3.fromRGB(180, 180, 180))
+addLine("     • 🔒 Security — HTTPS, viewport, warning", Color3.fromRGB(180, 180, 180))
+addLine("     • 📜 Raw    — HTML mentah", Color3.fromRGB(180, 180, 180))
+
+print("🔍 Website Analyzer Loaded")
