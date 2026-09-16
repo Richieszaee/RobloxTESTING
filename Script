@@ -1,427 +1,299 @@
 --[[
-	STEAL AN EGG - Auto Steal (Tween + Biome Select)
-	Dibuat sendiri, gak pake script hub
+	Mini Website Reader for Roblox (Delta)
+	- Fetch halaman via HttpGet
+	- Extract title, meta, OG tags
+	- Reader mode (text only)
+	- Riwayat URL
 ]]
 
-local Players     = game:GetService("Players")
-local RunService  = game:GetService("RunService")
-local TweenService= game:GetService("TweenService")
-local UIS         = game:GetService("UserInputService")
-local LP          = Players.LocalPlayer
-
---// CONFIG
-getgenv().AutoSteal     = false
-getgenv().SelectedBiome = "All"
-getgenv().TweenSpeed    = 250     -- studs/detik
-getgenv().StealRange    = 8
-getgenv().UseTween      = true
-getgenv().ReturnBase    = true
-getgenv().AutoInteract  = true
-
-local BIOMES = {"All", "Base", "Snow", "Volcano", "Ocean", "Cosmic", "Sakura", "Titan Temple", "Heaven"}
+local HttpService = game:GetService("HttpService")
+local UIS = game:GetService("UserInputService")
 
 --// GUI
 local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "SEGAutoSteal"
+ScreenGui.Name = "MiniReader"
 ScreenGui.Parent = game:GetService("CoreGui")
 ScreenGui.ResetOnSpawn = false
 
 local Frame = Instance.new("Frame")
 Frame.Parent = ScreenGui
-Frame.Size = UDim2.new(0, 320, 0, 540)
-Frame.Position = UDim2.new(0, 20, 0, 60)
-Frame.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+Frame.Size = UDim2.new(0, 520, 0, 600)
+Frame.Position = UDim2.new(0.5, -260, 0.5, -300)
+Frame.BackgroundColor3 = Color3.fromRGB(18, 18, 22)
 Frame.BorderSizePixel = 0
 Frame.Active = true
 Frame.Draggable = true
 
 local Title = Instance.new("TextLabel")
 Title.Parent = Frame
-Title.Size = UDim2.new(1, 0, 0, 30)
+Title.Size = UDim2.new(1, 0, 0, 32)
 Title.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
-Title.Text = "🥚 SEG Auto Steal"
+Title.Text = "🌐 Mini Website Reader"
 Title.TextColor3 = Color3.fromRGB(0, 255, 120)
 Title.Font = Enum.Font.SourceSansBold
-Title.TextSize = 15
+Title.TextSize = 16
 Title.BorderSizePixel = 0
 
-local function CreateLabel(text, yPos)
+-- URL Input
+local UrlBox = Instance.new("TextBox")
+UrlBox.Parent = Frame
+UrlBox.Size = UDim2.new(1, -100, 0, 32)
+UrlBox.Position = UDim2.new(0, 10, 0, 42)
+UrlBox.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
+UrlBox.BorderSizePixel = 0
+UrlBox.Text = ""
+UrlBox.PlaceholderText = "https://example.com atau paste URL..."
+UrlBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+UrlBox.PlaceholderColor3 = Color3.fromRGB(120, 120, 130)
+UrlBox.Font = Enum.Font.Code
+UrlBox.TextSize = 13
+UrlBox.ClearTextOnFocus = false
+UrlBox.TextXAlignment = Enum.TextXAlignment.Left
+UrlBox.TextScaled = false
+
+local GoBtn = Instance.new("TextButton")
+GoBtn.Parent = Frame
+GoBtn.Size = UDim2.new(0, 80, 0, 32)
+GoBtn.Position = UDim2.new(1, -90, 0, 42)
+GoBtn.BackgroundColor3 = Color3.fromRGB(0, 130, 80)
+GoBtn.BorderSizePixel = 0
+GoBtn.Text = "🔍 Fetch"
+GoBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+GoBtn.Font = Enum.Font.SourceSansBold
+GoBtn.TextSize = 13
+
+-- Toggle Reader Mode
+local ReaderToggle = Instance.new("TextButton")
+ReaderToggle.Parent = Frame
+ReaderToggle.Size = UDim2.new(0, 150, 0, 24)
+ReaderToggle.Position = UDim2.new(0, 10, 0, 80)
+ReaderToggle.BackgroundColor3 = Color3.fromRGB(50, 50, 60)
+ReaderToggle.BorderSizePixel = 0
+ReaderToggle.Text = "📖 Reader Mode: OFF"
+ReaderToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
+ReaderToggle.Font = Enum.Font.SourceSans
+ReaderToggle.TextSize = 12
+
+local ReaderMode = false
+ReaderToggle.MouseButton1Click:Connect(function()
+	ReaderMode = not ReaderMode
+	ReaderToggle.Text = "📖 Reader Mode: " .. (ReaderMode and "ON" or "OFF")
+	ReaderToggle.BackgroundColor3 = ReaderMode and Color3.fromRGB(0, 130, 80) or Color3.fromRGB(50, 50, 60)
+end)
+
+-- Status
+local StatusLbl = Instance.new("TextLabel")
+StatusLbl.Parent = Frame
+StatusLbl.Size = UDim2.new(1, -20, 0, 20)
+StatusLbl.Position = UDim2.new(0, 10, 0, 108)
+StatusLbl.BackgroundTransparency = 1
+StatusLbl.Text = "Ready. Paste URL & klik Fetch."
+StatusLbl.TextColor3 = Color3.fromRGB(0, 255, 120)
+StatusLbl.Font = Enum.Font.Code
+StatusLbl.TextSize = 12
+StatusLbl.TextXAlignment = Enum.TextXAlignment.Left
+
+-- Output area
+local OutputFrame = Instance.new("Frame")
+OutputFrame.Parent = Frame
+OutputFrame.Position = UDim2.new(0, 10, 0, 132)
+OutputFrame.Size = UDim2.new(1, -20, 1, -145)
+OutputFrame.BackgroundColor3 = Color3.fromRGB(10, 10, 14)
+OutputFrame.BorderSizePixel = 0
+
+local Scrolling = Instance.new("ScrollingFrame")
+Scrolling.Parent = OutputFrame
+Scrolling.Size = UDim2.new(1, -8, 1, -8)
+Scrolling.Position = UDim2.new(0, 4, 0, 4)
+Scrolling.BackgroundTransparency = 1
+Scrolling.BorderSizePixel = 0
+Scrolling.ScrollBarThickness = 6
+Scrolling.CanvasSize = UDim2.new(0, 0, 0, 0)
+Scrolling.AutomaticCanvasSize = Enum.AutomaticSize.Y
+
+local Layout = Instance.new("UIListLayout")
+Layout.Parent = Scrolling
+Layout.SortOrder = Enum.SortOrder.LayoutOrder
+Layout.Padding = UDim.new(0, 4)
+
+local function addBlock(text, color, size)
 	local lbl = Instance.new("TextLabel")
-	lbl.Parent = Frame
-	lbl.Size = UDim2.new(0, 300, 0, 16)
-	lbl.Position = UDim2.new(0, 10, 0, yPos)
+	lbl.Parent = Scrolling
+	lbl.Size = UDim2.new(1, -4, 0, size or 20)
 	lbl.BackgroundTransparency = 1
 	lbl.Text = text
-	lbl.TextColor3 = Color3.fromRGB(170, 170, 180)
-	lbl.Font = Enum.Font.SourceSansBold
+	lbl.TextColor3 = color or Color3.fromRGB(220, 220, 220)
+	lbl.Font = Enum.Font.Code
 	lbl.TextSize = 12
 	lbl.TextXAlignment = Enum.TextXAlignment.Left
+	lbl.TextYAlignment = Enum.TextYAlignment.Top
+	lbl.TextWrapped = true
+	lbl.AutomaticSize = Enum.AutomaticSize.Y
 	return lbl
 end
 
-local function CreateButton(name, yPos, callback)
-	local btn = Instance.new("TextButton")
-	btn.Parent = Frame
-	btn.Size = UDim2.new(0, 300, 0, 28)
-	btn.Position = UDim2.new(0, 10, 0, yPos)
-	btn.BackgroundColor3 = Color3.fromRGB(50, 50, 60)
-	btn.BorderSizePixel = 0
-	btn.Text = name
-	btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-	btn.Font = Enum.Font.SourceSans
-	btn.TextSize = 12
-	btn.MouseButton1Click:Connect(callback)
-	return btn
-end
-
-local function CreateSlider(name, yPos, min, max, default, callback)
-	local container = Instance.new("Frame")
-	container.Parent = Frame
-	container.Size = UDim2.new(0, 300, 0, 36)
-	container.Position = UDim2.new(0, 10, 0, yPos)
-	container.BackgroundColor3 = Color3.fromRGB(30, 30, 38)
-	container.BorderSizePixel = 0
-
-	local lbl = Instance.new("TextLabel")
-	lbl.Parent = container
-	lbl.Size = UDim2.new(1, -10, 0, 16)
-	lbl.Position = UDim2.new(0, 5, 0, 2)
-	lbl.BackgroundTransparency = 1
-	lbl.Text = name .. ": " .. default
-	lbl.TextColor3 = Color3.fromRGB(220, 220, 220)
-	lbl.Font = Enum.Font.SourceSans
-	lbl.TextSize = 12
-	lbl.TextXAlignment = Enum.TextXAlignment.Left
-
-	local bar = Instance.new("Frame")
-	bar.Parent = container
-	bar.Size = UDim2.new(1, -10, 0, 8)
-	bar.Position = UDim2.new(0, 5, 0, 22)
-	bar.BackgroundColor3 = Color3.fromRGB(60, 60, 70)
-	bar.BorderSizePixel = 0
-
-	local fill = Instance.new("Frame")
-	fill.Parent = bar
-	fill.Size = UDim2.new((default - min) / (max - min), 0, 1, 0)
-	fill.BackgroundColor3 = Color3.fromRGB(0, 200, 100)
-	fill.BorderSizePixel = 0
-
-	local btn = Instance.new("TextButton")
-	btn.Parent = bar
-	btn.Size = UDim2.new(1, 0, 1, 0)
-	btn.BackgroundTransparency = 1
-	btn.Text = ""
-
-	local dragging = false
-	local function update(input)
-		local rel = math.clamp((input.Position.X - bar.AbsolutePosition.X) / bar.AbsoluteSize.X, 0, 1)
-		local value = math.floor(min + (max - min) * rel)
-		fill.Size = UDim2.new(rel, 0, 1, 0)
-		lbl.Text = name .. ": " .. value
-		callback(value)
+local function clearOutput()
+	for _, c in ipairs(Scrolling:GetChildren()) do
+		if c:IsA("TextLabel") then c:Destroy() end
 	end
-	btn.InputBegan:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-			dragging = true
-			update(input)
-		end
-	end)
-	btn.InputEnded:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-			dragging = false
-		end
-	end)
-	UIS.InputChanged:Connect(function(input)
-		if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-			update(input)
-		end
-	end)
 end
-
---// Log
-local LogScroll = Instance.new("ScrollingFrame")
-LogScroll.Parent = Frame
-LogScroll.Position = UDim2.new(0, 10, 0, 320)
-LogScroll.Size = UDim2.new(0, 300, 0, 150)
-LogScroll.BackgroundColor3 = Color3.fromRGB(12, 12, 16)
-LogScroll.BorderSizePixel = 0
-LogScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
-LogScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
-LogScroll.ScrollBarThickness = 4
-
-local LogLayout = Instance.new("UIListLayout")
-LogLayout.Parent = LogScroll
-LogLayout.SortOrder = Enum.SortOrder.LayoutOrder
-LogLayout.Padding = UDim.new(0, 2)
-
-local function addLog(text, color)
-	local lbl = Instance.new("TextLabel")
-	lbl.Parent = LogScroll
-	lbl.Size = UDim2.new(1, -4, 0, 14)
-	lbl.BackgroundTransparency = 1
-	lbl.Text = "• " .. text
-	lbl.TextColor3 = color or Color3.fromRGB(200, 200, 200)
-	lbl.Font = Enum.Font.Code
-	lbl.TextSize = 11
-	lbl.TextXAlignment = Enum.TextXAlignment.Left
-end
-
---// Status
-local statusLbl = Instance.new("TextLabel")
-statusLbl.Parent = Frame
-statusLbl.Size = UDim2.new(1, -20, 0, 20)
-statusLbl.Position = UDim2.new(0, 10, 1, -25)
-statusLbl.BackgroundTransparency = 1
-statusLbl.Text = "Ready."
-statusLbl.TextColor3 = Color3.fromRGB(0, 255, 100)
-statusLbl.Font = Enum.Font.SourceSans
-statusLbl.TextSize = 12
-statusLbl.TextXAlignment = Enum.TextXAlignment.Left
 
 local function setStatus(txt, color)
-	statusLbl.Text = txt
-	statusLbl.TextColor3 = color or Color3.fromRGB(0, 255, 100)
+	StatusLbl.Text = txt
+	StatusLbl.TextColor3 = color or Color3.fromRGB(0, 255, 120)
 end
 
---// TWEEN FUNCTION
-local function getHRP()
-	local char = LP.Character
-	if not char then return nil, nil end
-	return char:FindFirstChild("HumanoidRootPart"), char:FindFirstChild("Humanoid")
+--// HTML Helpers
+local function stripTags(html)
+	local txt = html
+	txt = txt:gsub("<script[^>]*>.-</script>", "")
+	txt = txt:gsub("<style[^>]*>.-</style>", "")
+	txt = txt:gsub("<[^>]->", " ")
+	txt = txt:gsub("&nbsp;", " ")
+	txt = txt:gsub("&amp;", "&")
+	txt = txt:gsub("&lt;", "<")
+	txt = txt:gsub("&gt;", ">")
+	txt = txt:gsub("&quot;", '"')
+	txt = txt:gsub("&#39;", "'")
+	txt = txt:gsub("%s+", " ")
+	return txt
 end
 
-local function tweenTo(targetPos, speed)
-	local hrp, hum = getHRP()
-	if not hrp or not hum then return false end
-
-	local distance = (hrp.Position - targetPos).Magnitude
-	local duration = distance / (speed or 250)
-
-	hum.WalkSpeed = 0
-	hum.JumpPower = 0
-	hum.PlatformStand = true
-	hrp.Anchored = true
-
-	local tween = TweenService:Create(
-		hrp,
-		TweenInfo.new(duration, Enum.EasingStyle.Linear, Enum.EasingDirection.Out),
-		{CFrame = CFrame.new(targetPos)}
-	)
-	tween:Play()
-	tween.Completed:Wait()
-
-	hrp.Anchored = false
-	hum.PlatformStand = false
-	hum.WalkSpeed = 16
-	hum.JumpPower = 50
-	return true
+local function extractMeta(html, prop)
+	-- Cari <meta property="prop" content="...">
+	local pattern = '<meta[^>]*property="' .. prop .. '"[^>]*content="([^"]*)"'
+	local val = html:match(pattern)
+	if not val then
+		-- Coba urutan terbalik
+		pattern = '<meta[^>]*content="([^"]*)"[^>]*property="' .. prop .. '"'
+		val = html:match(pattern)
+	end
+	return val
 end
 
---// EGG FINDER
--- Cari object yang namanya mengandung "Egg" di workspace
-local function findEggs()
-	local eggs = {}
-	for _, obj in ipairs(workspace:GetDescendants()) do
-		if obj:IsA("BasePart") or obj:IsA("Model") then
-			local name = obj.Name
-			if name:lower():find("egg") and not name:lower():find("gui") then
-				local pos
-				if obj:IsA("Model") then
-					local primary = obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")
-					if primary then pos = primary.Position end
-				else
-					pos = obj.Position
-				end
-				if pos then
-					table.insert(eggs, {object = obj, position = pos, name = name})
-				end
-			end
-		end
+local function extractName(html, name)
+	local pattern = '<meta[^>]*name="' .. name .. '"[^>]*content="([^"]*)"'
+	local val = html:match(pattern)
+	if not val then
+		pattern = '<meta[^>]*content="([^"]*)"[^>]*name="' .. name .. '"'
+		val = html:match(pattern)
 	end
-	return eggs
+	return val
 end
 
--- Cari biome terdekat dari posisi player
-local function detectBiome(pos)
-	local closest = "Unknown"
-	local minDist = math.huge
-	for _, biomeName in ipairs(BIOMES) do
-		if biomeName ~= "All" then
-			local biomeObj = workspace:FindFirstChild(biomeName, true)
-			if biomeObj then
-				local bPos
-				if biomeObj:IsA("Model") then
-					local pp = biomeObj.PrimaryPart or biomeObj:FindFirstChildWhichIsA("BasePart")
-					if pp then bPos = pp.Position end
-				elseif biomeObj:IsA("BasePart") then
-					bPos = biomeObj.Position
-				end
-				if bPos then
-					local d = (pos - bPos).Magnitude
-					if d < minDist then minDist = d; closest = biomeName end
-				end
-			end
-		end
+--// FETCH FUNCTION
+local function fetchWebsite(url)
+	if url == "" or not url:match("^https?://") then
+		setStatus("❌ URL harus mulai dengan http:// atau https://", Color3.fromRGB(255, 80, 80))
+		return
 	end
-	return closest
+
+	setStatus("⏳ Fetching... " .. url:sub(1, 40), Color3.fromRGB(255, 200, 0))
+	clearOutput()
+
+	local ok, html = pcall(function()
+		return game:HttpGet(url, true)
+	end)
+
+	if not ok or not html then
+		setStatus("❌ Gagal fetch (HttpGet error)", Color3.fromRGB(255, 80, 80))
+		addBlock("❌ Error: " .. tostring(html), Color3.fromRGB(255, 100, 100))
+		return
+	end
+
+	addBlock("✅ Berhasil fetch (" .. #html .. " bytes)", Color3.fromRGB(0, 255, 120))
+
+	-- Extract info
+	local title = html:match("<title[^>]*>([^<]*)</title>") or "No title"
+	local desc = extractName(html, "description") or extractMeta(html, "og:description") or "-"
+	local ogTitle = extractMeta(html, "og:title") or "-"
+	local ogImage = extractMeta(html, "og:image") or "-"
+	local ogUrl = extractMeta(html, "og:url") or "-"
+	local ogType = extractMeta(html, "og:type") or "-"
+
+	addBlock("━━━ 📄 PAGE INFO ━━━", Color3.fromRGB(0, 200, 255))
+	addBlock("📌 Title: " .. title, Color3.fromRGB(255, 255, 255))
+	addBlock("📝 Description: " .. desc, Color3.fromRGB(200, 200, 200))
+
+	addBlock("━━━ 🌐 OPEN GRAPH ━━━", Color3.fromRGB(0, 200, 255))
+	addBlock("OG Title: " .. ogTitle, Color3.fromRGB(200, 220, 255))
+	addBlock("OG Type: " .. ogType, Color3.fromRGB(200, 220, 255))
+	addBlock("OG URL: " .. ogUrl, Color3.fromRGB(200, 220, 255))
+	addBlock("OG Image: " .. ogImage, Color3.fromRGB(200, 220, 255))
+
+	-- Reader mode
+	if ReaderMode then
+		addBlock("━━━ 📖 READER MODE ━━━", Color3.fromRGB(0, 255, 120))
+		local plain = stripTags(html)
+		-- Potong biar nggak kepanjangan
+		if #plain > 3000 then plain = plain:sub(1, 3000) .. "... [dipotong]" end
+		addBlock(plain, Color3.fromRGB(220, 220, 220))
+	else
+		-- Raw preview
+		addBlock("━━━ 📜 RAW HTML (preview) ━━━", Color3.fromRGB(255, 200, 0))
+		local preview = html:sub(1, 1500)
+		addBlock(preview, Color3.fromRGB(180, 180, 180))
+	end
+
+	setStatus("✅ Selesai! " .. #html .. " bytes", Color3.fromRGB(0, 255, 120))
 end
 
---// STEAL LOGIC
-local function stealEgg(egg)
-	local hrp, hum = getHRP()
-	if not hrp then return false end
+GoBtn.MouseButton1Click:Connect(function()
+	fetchWebsite(UrlBox.Text)
+end)
 
-	-- Tween ke egg
-	addLog("🎯 Menuju: " .. egg.name, Color3.fromRGB(255, 200, 0))
-	local ok = tweenTo(egg.position, getgenv().TweenSpeed)
-	if not ok then return false end
+UrlBox.FocusLost:Connect(function(enter)
+	if enter then fetchWebsite(UrlBox.Text) end
+end)
 
-	-- Cek jarak
-	local dist = (hrp.Position - egg.position).Magnitude
-	if dist > getgenv().StealRange then
-		addLog("❌ Terlalu jauh dari egg", Color3.fromRGB(255, 80, 80))
-		return false
-	end
+--// Quick link examples
+local QuickFrame = Instance.new("Frame")
+QuickFrame.Parent = Frame
+QuickFrame.Position = UDim2.new(0, 170, 0, 80)
+QuickFrame.Size = UDim2.new(1, -180, 0, 24)
+QuickFrame.BackgroundTransparency = 1
 
-	-- Auto interact: kirim E / ProximityPrompt
-	if getgenv().AutoInteract then
-		-- Trigger ProximityPrompt kalau ada
-		for _, d in ipairs(egg.object:GetDescendants()) do
-			if d:IsA("ProximityPrompt") then
-				pcall(function()
-					game:GetService("ProximityPromptService"):PromptButtonHoldBegan(d)
-					task.wait(0.3)
-					game:GetService("ProximityPromptService"):PromptButtonHoldEnded(d)
-				end)
-			end
-		end
+local quickUrls = {
+	{label = "Roblox", url = "https://www.roblox.com"},
+	{label = "GitHub", url = "https://github.com"},
+	{label = "Example", url = "https://example.com"},
+	{label = "ipify", url = "https://api.ipify.org"},
+}
 
-		-- Kirim E key via VirtualInputManager (kalau ProximityPrompt ga ada)
-		local VIM = game:GetService("VirtualInputManager")
-		pcall(function()
-			VIM:SendKeyEvent(true, Enum.KeyCode.E, false, game)
-			task.wait(0.15)
-			VIM:SendKeyEvent(false, Enum.KeyCode.E, false, game)
-		end)
-	end
-
-	addLog("✅ Berhasil interact dengan " .. egg.name, Color3.fromRGB(0, 255, 100))
-	return true
+local xPos = 0
+for _, q in ipairs(quickUrls) do
+	local b = Instance.new("TextButton")
+	b.Parent = QuickFrame
+	b.Size = UDim2.new(0, 70, 0, 24)
+	b.Position = UDim2.new(0, xPos, 0, 0)
+	b.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
+	b.BorderSizePixel = 0
+	b.Text = q.label
+	b.TextColor3 = Color3.fromRGB(200, 220, 255)
+	b.Font = Enum.Font.SourceSans
+	b.TextSize = 11
+	b.MouseButton1Click:Connect(function()
+		UrlBox.Text = q.url
+		fetchWebsite(q.url)
+	end)
+	xPos = xPos + 75
 end
 
---// AUTO STEAL LOOP
-task.spawn(function()
-	while task.wait(0.5) do
-		if not ScreenGui.Parent then break end
-		if not getgenv().AutoSteal then continue end
-
-		local hrp = getHRP()
-		if not hrp then continue end
-
-		-- Cari egg
-		local eggs = findEggs()
-		if #eggs == 0 then
-			setStatus("🔍 Mencari egg...", Color3.fromRGB(255, 200, 0))
-			continue
-		end
-
-		-- Filter berdasarkan biome
-		local targetEgg = nil
-		local minDist = math.huge
-		for _, egg in ipairs(eggs) do
-			local biome = detectBiome(egg.position)
-			if getgenv().SelectedBiome == "All" or biome == getgenv().SelectedBiome then
-				local d = (hrp.Position - egg.position).Magnitude
-				if d < minDist then
-					minDist = d
-					targetEgg = egg
-				end
-			end
-		end
-
-		if not targetEgg then
-			setStatus("⚠️ Nggak ada egg di biome " .. getgenv().SelectedBiome, Color3.fromRGB(255, 200, 0))
-			continue
-		end
-
-		-- Steal
-		setStatus("🎯 Target: " .. targetEgg.name .. " (" .. math.floor(minDist) .. " studs)", Color3.fromRGB(0, 200, 255))
-		stealEgg(targetEgg)
-
-		task.wait(0.5)
-	end
-end)
-
---// BIOME CYCLE
-local biomeIndex = 1
-
---// UI ELEMENTS
-local y = 38
-CreateLabel("Biome Steal:", y)
-y = y + 20
-
-local BiomeBtn = CreateButton("🎯 Biome: " .. getgenv().SelectedBiome, y, function()
-	biomeIndex = biomeIndex + 1
-	if biomeIndex > #BIOMES then biomeIndex = 1 end
-	getgenv().SelectedBiome = BIOMES[biomeIndex]
-	BiomeBtn.Text = "🎯 Biome: " .. getgenv().SelectedBiome
-	addLog("Biome: " .. getgenv().SelectedBiome, Color3.fromRGB(100, 200, 255))
-end)
-y = y + 34
-
--- Toggle Auto Steal
-local StealBtn = CreateButton("⚡ Auto Steal: OFF", y, function()
-	getgenv().AutoSteal = not getgenv().AutoSteal
-	StealBtn.Text = "⚡ Auto Steal: " .. (getgenv().AutoSteal and "ON" or "OFF")
-	StealBtn.BackgroundColor3 = getgenv().AutoSteal and Color3.fromRGB(0, 130, 0) or Color3.fromRGB(50, 50, 60)
-	addLog("Auto Steal: " .. (getgenv().AutoSteal and "ON" or "OFF"), getgenv().AutoSteal and Color3.fromRGB(0, 255, 100) or Color3.fromRGB(255, 100, 100))
-end)
-y = y + 30
-
--- Toggle Interact
-local InteractBtn = CreateButton("🔘 Auto Interact (E): ON", y, function()
-	getgenv().AutoInteract = not getgenv().AutoInteract
-	InteractBtn.Text = "🔘 Auto Interact (E): " .. (getgenv().AutoInteract and "ON" or "OFF")
-	InteractBtn.BackgroundColor3 = getgenv().AutoInteract and Color3.fromRGB(0, 130, 0) or Color3.fromRGB(50, 50, 60)
-end)
-y = y + 34
-
--- Slider Tween Speed
-CreateSlider("Tween Speed", y, 50, 800, getgenv().TweenSpeed, function(v)
-	getgenv().TweenSpeed = v
-end)
-y = y + 42
-
--- Slider Range
-CreateSlider("Steal Range", y, 5, 30, getgenv().StealRange, function(v)
-	getgenv().StealRange = v
-end)
-y = y + 42
-
--- Tombol scan egg
-CreateButton("🔍 Scan Eggs (manual)", y, function()
-	local eggs = findEggs()
-	addLog("Scan: " .. #eggs .. " egg ditemukan", Color3.fromRGB(0, 200, 255))
-	for _, egg in ipairs(eggs) do
-		local biome = detectBiome(egg.position)
-		addLog("  - " .. egg.name .. " [" .. biome .. "]", Color3.fromRGB(180, 180, 180))
-	end
-end)
-y = y + 34
-
--- Tombol kirim status ke Discord (opsional)
-CreateButton("❌ Close GUI", y, function()
+--// Close
+local CloseBtn = Instance.new("TextButton")
+CloseBtn.Parent = Frame
+CloseBtn.Size = UDim2.new(0, 24, 0, 24)
+CloseBtn.Position = UDim2.new(1, -30, 0, 4)
+CloseBtn.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
+CloseBtn.BorderSizePixel = 0
+CloseBtn.Text = "X"
+CloseBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+CloseBtn.Font = Enum.Font.SourceSansBold
+CloseBtn.TextSize = 14
+CloseBtn.MouseButton1Click:Connect(function()
 	ScreenGui:Destroy()
-	print("✅ SEG Auto Steal closed")
+	print("🌐 Mini Reader closed")
 end)
-y = y + 30
 
-Frame.Size = UDim2.new(0, 320, 0, y + 60)
-
---// INIT
-addLog("✅ Script loaded", Color3.fromRGB(0, 255, 100))
-addLog("1. Pilih biome", Color3.fromRGB(200, 200, 200))
-addLog("2. Klik Auto Steal ON", Color3.fromRGB(200, 200, 200))
-addLog("3. Tunggu auto tween + steal", Color3.fromRGB(200, 200, 200))
-
-print("✅ SEG Auto Steal Loaded")
+print("🌐 Mini Website Reader Loaded")
+print("Tip: coba fetch https://api.ipify.org atau https://example.com")
