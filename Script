@@ -1,14 +1,21 @@
 --[[
-	FOLLOW PLAYER + AUTO CLICKER — CLEAN EDITION
-	Ringan • Stabil • Global Clicker Toggle • Tanpa animasi berat
+	FOLLOW PLAYER + AUTO CLICKER — NO VIM EDITION
+	- Tanpa VirtualInputManager (anti-cheat friendly)
+	- Auto Clicker pakai mouse1click() (executor API)
+	- Auto Clicker default OFF
+	- Clean & ringan
 ]]
 
 local Players      = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local UIS          = game:GetService("UserInputService")
-local VIM          = game:GetService("VirtualInputManager")
 
 local LP = Players.LocalPlayer
+
+--// Cek dukungan mouse API
+local HAS_MOUSE1CLICK = (type(mouse1click) == "function")
+local HAS_MOUSE_PRESS = (type(mouse1press) == "function" and type(mouse1release) == "function")
+local CLICK_SUPPORTED = HAS_MOUSE1CLICK or HAS_MOUSE_PRESS
 
 --// Palette
 local C = {
@@ -35,9 +42,8 @@ getgenv().Blocklist      = {}
 getgenv().CurrentTarget  = nil
 getgenv().ActiveTween    = nil
 getgenv().SwitchCount    = 0
-getgenv().ClickerEnabled = false
-getgenv().ClickerCPS     = 10
-getgenv().ClickerMode    = "Center"
+getgenv().ClickerEnabled = false   -- default OFF
+getgenv().ClickerCPS     = 8       -- default rendah biar aman
 getgenv().ClickerCount   = 0
 
 --// Helpers
@@ -71,27 +77,25 @@ end
 
 --// ScreenGui
 local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "FollowPlayerClean"
+ScreenGui.Name = "FollowPlayerNoVIM"
 ScreenGui.Parent = game:GetService("CoreGui")
 ScreenGui.ResetOnSpawn = false
 ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 
--- Shadow
 local Shadow = Instance.new("Frame")
 Shadow.Parent = ScreenGui
-Shadow.Size = UDim2.new(0, 720, 0, 620)
-Shadow.Position = UDim2.new(0.5, -356, 0.5, -306)
+Shadow.Size = UDim2.new(0, 700, 0, 580)
+Shadow.Position = UDim2.new(0.5, -346, 0.5, -286)
 Shadow.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-Shadow.BackgroundTransparency = 0.5
+Shadow.BackgroundTransparency = 0.55
 Shadow.BorderSizePixel = 0
 Shadow.ZIndex = 0
 corner(Shadow, 20)
 
--- Main
 local Main = Instance.new("Frame")
 Main.Parent = ScreenGui
-Main.Size = UDim2.new(0, 720, 0, 620)
-Main.Position = UDim2.new(0.5, -360, 0.5, -310)
+Main.Size = UDim2.new(0, 700, 0, 580)
+Main.Position = UDim2.new(0.5, -350, 0.5, -290)
 Main.BackgroundColor3 = C.bg
 Main.BorderSizePixel = 0
 Main.Active = true
@@ -150,38 +154,37 @@ SubLbl.Parent = Header
 SubLbl.Position = UDim2.new(0, 56, 0, 28)
 SubLbl.Size = UDim2.new(1, -220, 0, 14)
 SubLbl.BackgroundTransparency = 1
-SubLbl.Text = "clean edition  •  lightweight"
+SubLbl.Text = "no VIM  •  anti-cheat friendly"
 SubLbl.TextColor3 = C.textMuted
 SubLbl.Font = Enum.Font.Gotham
 SubLbl.TextSize = 10
 SubLbl.TextXAlignment = Enum.TextXAlignment.Left
 SubLbl.ZIndex = 2
 
--- Global clicker quick badge di header
-local HeaderClickerBadge = Instance.new("Frame")
-HeaderClickerBadge.Parent = Header
-HeaderClickerBadge.Size = UDim2.new(0, 110, 0, 26)
-HeaderClickerBadge.Position = UDim2.new(1, -152, 0, 13)
-HeaderClickerBadge.BackgroundColor3 = C.surface2
-HeaderClickerBadge.BorderSizePixel = 0
-HeaderClickerBadge.ZIndex = 2
-corner(HeaderClickerBadge, 8)
-local HeaderBadgeStroke = stroke(HeaderClickerBadge, C.stroke, 1)
+-- Support status badge
+local SupportBadge = Instance.new("Frame")
+SupportBadge.Parent = Header
+SupportBadge.Size = UDim2.new(0, 120, 0, 22)
+SupportBadge.Position = UDim2.new(1, -162, 0, 15)
+SupportBadge.BackgroundColor3 = CLICK_SUPPORTED and Color3.fromRGB(30, 60, 40) or Color3.fromRGB(60, 30, 30)
+SupportBadge.BorderSizePixel = 0
+SupportBadge.ZIndex = 2
+corner(SupportBadge, 6)
 
-local HeaderClickerLbl = Instance.new("TextLabel")
-HeaderClickerLbl.Parent = HeaderClickerBadge
-HeaderClickerLbl.Size = UDim2.new(1, 0, 1, 0)
-HeaderClickerLbl.BackgroundTransparency = 1
-HeaderClickerLbl.Text = "🖱️  Clicker OFF"
-HeaderClickerLbl.TextColor3 = C.textMuted
-HeaderClickerLbl.Font = Enum.Font.GothamBold
-HeaderClickerLbl.TextSize = 11
-HeaderClickerLbl.ZIndex = 3
+local SupportLbl = Instance.new("TextLabel")
+SupportLbl.Parent = SupportBadge
+SupportLbl.Size = UDim2.new(1, 0, 1, 0)
+SupportLbl.BackgroundTransparency = 1
+SupportLbl.Text = CLICK_SUPPORTED and "✓ mouse API OK" or "✗ no mouse API"
+SupportLbl.TextColor3 = CLICK_SUPPORTED and C.success or C.danger
+SupportLbl.Font = Enum.Font.GothamBold
+SupportLbl.TextSize = 10
+SupportLbl.ZIndex = 3
 
 local CloseBtn = Instance.new("TextButton")
 CloseBtn.Parent = Header
 CloseBtn.Size = UDim2.new(0, 28, 0, 28)
-CloseBtn.Position = UDim2.new(1, -40, 0, 12)
+CloseBtn.Position = UDim2.new(1, -38, 0, 12)
 CloseBtn.BackgroundColor3 = C.surface2
 CloseBtn.BorderSizePixel = 0
 CloseBtn.Text = "✕"
@@ -206,108 +209,134 @@ CloseBtn.MouseButton1Click:Connect(function()
 	ScreenGui:Destroy()
 end)
 
--- ========== GLOBAL CLICKER TOGGLE (header area, selalu keliatan) ==========
-local GlobalClickerRow = Instance.new("Frame")
-GlobalClickerRow.Parent = Main
-GlobalClickerRow.Size = UDim2.new(1, -28, 0, 46)
-GlobalClickerRow.Position = UDim2.new(0, 14, 0, 64)
-GlobalClickerRow.BackgroundColor3 = C.surface
-GlobalClickerRow.BorderSizePixel = 0
-GlobalClickerRow.ZIndex = 5
-corner(GlobalClickerRow, 10)
-stroke(GlobalClickerRow, C.stroke, 1)
+-- ========== WARNING BANNER (kalau mouse API gak ada) ==========
+if not CLICK_SUPPORTED then
+	local WarnBanner = Instance.new("Frame")
+	WarnBanner.Parent = Main
+	WarnBanner.Size = UDim2.new(1, -28, 0, 36)
+	WarnBanner.Position = UDim2.new(0, 14, 0, 64)
+	WarnBanner.BackgroundColor3 = Color3.fromRGB(60, 30, 30)
+	WarnBanner.BorderSizePixel = 0
+	WarnBanner.ZIndex = 5
+	corner(WarnBanner, 8)
 
-local GCIcon = Instance.new("TextLabel")
-GCIcon.Parent = GlobalClickerRow
-GCIcon.Position = UDim2.new(0, 12, 0, 0)
-GCIcon.Size = UDim2.new(0, 24, 1, 0)
-GCIcon.BackgroundTransparency = 1
-GCIcon.Text = "🖱️"
-GCIcon.Font = Enum.Font.Gotham
-GCIcon.TextSize = 14
-GCIcon.TextXAlignment = Enum.TextXAlignment.Left
-GCIcon.ZIndex = 6
+	local WarnLbl = Instance.new("TextLabel")
+	WarnLbl.Parent = WarnBanner
+	WarnLbl.Position = UDim2.new(0, 12, 0, 0)
+	WarnLbl.Size = UDim2.new(1, -24, 1, 0)
+	WarnLbl.BackgroundTransparency = 1
+	WarnLbl.Text = "⚠ Executor ini nggak support mouse1click — fitur clicker dimatiin"
+	WarnLbl.TextColor3 = C.warn
+	WarnLbl.Font = Enum.Font.GothamMedium
+	WarnLbl.TextSize = 11
+	WarnLbl.TextXAlignment = Enum.TextXAlignment.Left
+	WarnLbl.ZIndex = 6
+end
 
-local GCName = Instance.new("TextLabel")
-GCName.Parent = GlobalClickerRow
-GCName.Position = UDim2.new(0, 42, 0, 6)
-GCName.Size = UDim2.new(1, -220, 0, 16)
-GCName.BackgroundTransparency = 1
-GCName.Text = "AUTO CLICKER"
-GCName.TextColor3 = C.textDim
-GCName.Font = Enum.Font.GothamBold
-GCName.TextSize = 10
-GCName.TextXAlignment = Enum.TextXAlignment.Left
-GCName.ZIndex = 6
+-- ========== CLICKER CARD (di bawah warning kalau ada) ==========
+local ClickerY = CLICK_SUPPORTED and 64 or 108
 
-local GCStatus = Instance.new("TextLabel")
-GCStatus.Parent = GlobalClickerRow
-GCStatus.Position = UDim2.new(0, 42, 0, 22)
-GCStatus.Size = UDim2.new(1, -220, 0, 16)
-GCStatus.BackgroundTransparency = 1
-GCStatus.Text = "OFF"
-GCStatus.TextColor3 = C.textMuted
-GCStatus.Font = Enum.Font.GothamBold
-GCStatus.TextSize = 13
-GCStatus.TextXAlignment = Enum.TextXAlignment.Left
-GCStatus.ZIndex = 6
+local ClickerCard = Instance.new("Frame")
+ClickerCard.Parent = Main
+ClickerCard.Size = UDim2.new(1, -28, 0, 56)
+ClickerCard.Position = UDim2.new(0, 14, 0, ClickerY)
+ClickerCard.BackgroundColor3 = C.surface
+ClickerCard.BorderSizePixel = 0
+ClickerCard.ZIndex = 5
+corner(ClickerCard, 10)
+stroke(ClickerCard, C.stroke, 1)
 
--- Toggle switch global
-local GCToggle = Instance.new("TextButton")
-GCToggle.Parent = GlobalClickerRow
-GCToggle.Size = UDim2.new(0, 46, 0, 24)
-GCToggle.Position = UDim2.new(1, -120, 0, 11)
-GCToggle.BackgroundColor3 = C.surface3
-GCToggle.Text = ""
-GCToggle.BorderSizePixel = 0
-GCToggle.ZIndex = 6
-GCToggle.AutoButtonColor = false
-corner(GCToggle, 12)
-local GCStroke = stroke(GCToggle, C.stroke, 1)
+local CCIcon = Instance.new("TextLabel")
+CCIcon.Parent = ClickerCard
+CCIcon.Position = UDim2.new(0, 14, 0, 0)
+CCIcon.Size = UDim2.new(0, 24, 1, 0)
+CCIcon.BackgroundTransparency = 1
+CCIcon.Text = "🖱️"
+CCIcon.Font = Enum.Font.Gotham
+CCIcon.TextSize = 15
+CCIcon.TextXAlignment = Enum.TextXAlignment.Left
+CCIcon.ZIndex = 6
 
-local GCToggleKnob = Instance.new("Frame")
-GCToggleKnob.Parent = GCToggle
-GCToggleKnob.Size = UDim2.new(0, 18, 0, 18)
-GCToggleKnob.Position = UDim2.new(0, 3, 0.5, -9)
-GCToggleKnob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-GCToggleKnob.BorderSizePixel = 0
-GCToggleKnob.ZIndex = 7
-corner(GCToggleKnob, 9)
+local CCName = Instance.new("TextLabel")
+CCName.Parent = ClickerCard
+CCName.Position = UDim2.new(0, 46, 0, 8)
+CCName.Size = UDim2.new(1, -200, 0, 16)
+CCName.BackgroundTransparency = 1
+CCName.Text = "AUTO CLICKER"
+CCName.TextColor3 = C.textDim
+CCName.Font = Enum.Font.GothamBold
+CCName.TextSize = 10
+CCName.TextXAlignment = Enum.TextXAlignment.Left
+CCName.ZIndex = 6
 
--- Tombol CPS cepat + mode (mini)
-local GCQuick = Instance.new("TextButton")
-GCQuick.Parent = GlobalClickerRow
-GCQuick.Size = UDim2.new(0, 100, 0, 24)
-GCQuick.Position = UDim2.new(1, -12, 0, 11)
-GCQuick.BackgroundColor3 = C.surface2
-GCQuick.Text = "⚙  " .. getgenv().ClickerCPS .. " CPS"
-GCQuick.TextColor3 = C.textDim
-GCQuick.Font = Enum.Font.GothamBold
-GCQuick.TextSize = 11
-GCQuick.BorderSizePixel = 0
-GCQuick.ZIndex = 6
-GCQuick.AutoButtonColor = false
-corner(GCQuick, 8)
-stroke(GCQuick, C.stroke, 1)
-hoverBtn(GCQuick, C.surface2, C.surface3)
-GCQuick.MouseButton1Click:Connect(function()
-	-- quick cycle CPS: 5 → 10 → 15 → 20 → 30 → 50 → 5
-	local cycle = {5, 10, 15, 20, 30, 50}
+local CCStatus = Instance.new("TextLabel")
+CCStatus.Parent = ClickerCard
+CCStatus.Position = UDim2.new(0, 46, 0, 24)
+CCStatus.Size = UDim2.new(1, -200, 0, 22)
+CCStatus.BackgroundTransparency = 1
+CCStatus.Text = "OFF"
+CCStatus.TextColor3 = C.textMuted
+CCStatus.Font = Enum.Font.GothamBold
+CCStatus.TextSize = 14
+CCStatus.TextXAlignment = Enum.TextXAlignment.Left
+CCStatus.ZIndex = 6
+
+-- Toggle switch
+local CCToggle = Instance.new("TextButton")
+CCToggle.Parent = ClickerCard
+CCToggle.Size = UDim2.new(0, 46, 0, 24)
+CCToggle.Position = UDim2.new(1, -120, 0, 16)
+CCToggle.BackgroundColor3 = C.surface3
+CCToggle.Text = ""
+CCToggle.BorderSizePixel = 0
+CCToggle.ZIndex = 6
+CCToggle.AutoButtonColor = false
+corner(CCToggle, 12)
+local CCStroke = stroke(CCToggle, C.stroke, 1)
+
+local CCToggleKnob = Instance.new("Frame")
+CCToggleKnob.Parent = CCToggle
+CCToggleKnob.Size = UDim2.new(0, 18, 0, 18)
+CCToggleKnob.Position = UDim2.new(0, 3, 0.5, -9)
+CCToggleKnob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+CCToggleKnob.BorderSizePixel = 0
+CCToggleKnob.ZIndex = 7
+corner(CCToggleKnob, 9)
+
+-- CPS quick button
+local CCQuick = Instance.new("TextButton")
+CCQuick.Parent = ClickerCard
+CCQuick.Size = UDim2.new(0, 100, 0, 24)
+CCQuick.Position = UDim2.new(1, -12, 0, 16)
+CCQuick.BackgroundColor3 = C.surface2
+CCQuick.Text = "⚙  " .. getgenv().ClickerCPS .. " CPS"
+CCQuick.TextColor3 = C.textDim
+CCQuick.Font = Enum.Font.GothamBold
+CCQuick.TextSize = 11
+CCQuick.BorderSizePixel = 0
+CCQuick.ZIndex = 6
+CCQuick.AutoButtonColor = false
+corner(CCQuick, 8)
+stroke(CCQuick, C.stroke, 1)
+hoverBtn(CCQuick, C.surface2, C.surface3)
+CCQuick.MouseButton1Click:Connect(function()
+	local cycle = {3, 5, 8, 10, 15, 20}
 	local cur = getgenv().ClickerCPS
 	local idx = 1
 	for i, v in ipairs(cycle) do if v == cur then idx = i end end
 	idx = idx + 1
 	if idx > #cycle then idx = 1 end
 	getgenv().ClickerCPS = cycle[idx]
-	GCQuick.Text = "⚙  " .. getgenv().ClickerCPS .. " CPS"
-	updateGlobalClicker()
-	toast("CPS → " .. getgenv().ClickerCPS)
+	CCQuick.Text = "⚙  " .. getgenv().ClickerCPS .. " CPS"
+	updateClicker()
 end)
 
 -- ========== TARGET CARD ==========
+local TargetY = ClickerY + 68
+
 local TargetCard = Instance.new("Frame")
 TargetCard.Parent = Main
-TargetCard.Position = UDim2.new(0, 14, 0, 122)
+TargetCard.Position = UDim2.new(0, 14, 0, TargetY)
 TargetCard.Size = UDim2.new(1, -28, 0, 76)
 TargetCard.BackgroundColor3 = C.surface
 TargetCard.BorderSizePixel = 0
@@ -382,10 +411,12 @@ TargetStatusLbl.TextXAlignment = Enum.TextXAlignment.Left
 TargetStatusLbl.ZIndex = 6
 
 -- ========== FOLLOW BUTTON ==========
+local FollowY = TargetY + 88
+
 local FollowToggleBtn = Instance.new("TextButton")
 FollowToggleBtn.Parent = Main
 FollowToggleBtn.Size = UDim2.new(1, -28, 0, 46)
-FollowToggleBtn.Position = UDim2.new(0, 14, 0, 208)
+FollowToggleBtn.Position = UDim2.new(0, 14, 0, FollowY)
 FollowToggleBtn.BackgroundColor3 = C.accent
 FollowToggleBtn.Text = "▶   Start Follow"
 FollowToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -501,69 +532,23 @@ local function makeSlider(parent, x, y, w, name, min, max, default, accent, cb)
 	end)
 end
 
-makeSlider(Main, 14, 262, 336, "Tween Speed", 50, 800, 200, C.accent, function(v)
+local SliderY = FollowY + 56
+
+makeSlider(Main, 14, SliderY, 326, "Tween Speed", 50, 800, 200, C.accent, function(v)
 	getgenv().FollowSpeed = v
 end)
 
-makeSlider(Main, 358, 262, 348, "Switch Distance", 3, 30, 6, C.warn, function(v)
+makeSlider(Main, 348, SliderY, 338, "Switch Distance", 3, 30, 6, C.warn, function(v)
 	getgenv().SwitchDist = v
 end)
 
--- ========== CLICKER MODE ROW ==========
-local ModeRow = Instance.new("Frame")
-ModeRow.Parent = Main
-ModeRow.Size = UDim2.new(1, -28, 0, 46)
-ModeRow.Position = UDim2.new(0, 14, 0, 326)
-ModeRow.BackgroundColor3 = C.surface
-ModeRow.BorderSizePixel = 0
-ModeRow.ZIndex = 5
-corner(ModeRow, 10)
-stroke(ModeRow, C.stroke, 1)
-
-local ModeLabel = Instance.new("TextLabel")
-ModeLabel.Parent = ModeRow
-ModeLabel.Position = UDim2.new(0, 14, 0, 0)
-ModeLabel.Size = UDim2.new(1, -220, 1, 0)
-ModeLabel.BackgroundTransparency = 1
-ModeLabel.Text = "Click Mode: Center (tengah layar)"
-ModeLabel.TextColor3 = C.textDim
-ModeLabel.Font = Enum.Font.GothamMedium
-ModeLabel.TextSize = 12
-ModeLabel.TextXAlignment = Enum.TextXAlignment.Left
-ModeLabel.ZIndex = 6
-
-local ModeCycleBtn = Instance.new("TextButton")
-ModeCycleBtn.Parent = ModeRow
-ModeCycleBtn.Size = UDim2.new(0, 180, 1, -8)
-ModeCycleBtn.Position = UDim2.new(1, -190, 0, 4)
-ModeCycleBtn.BackgroundColor3 = C.surface2
-ModeCycleBtn.Text = "📍  Center"
-ModeCycleBtn.TextColor3 = C.text
-ModeCycleBtn.Font = Enum.Font.GothamBold
-ModeCycleBtn.TextSize = 12
-ModeCycleBtn.BorderSizePixel = 0
-ModeCycleBtn.ZIndex = 6
-ModeCycleBtn.AutoButtonColor = false
-corner(ModeCycleBtn, 8)
-stroke(ModeCycleBtn, C.stroke, 1)
-hoverBtn(ModeCycleBtn, C.surface2, C.surface3)
-ModeCycleBtn.MouseButton1Click:Connect(function()
-	if getgenv().ClickerMode == "Center" then
-		getgenv().ClickerMode = "Mouse"
-		ModeCycleBtn.Text = "🖱️  Mouse"
-		ModeLabel.Text = "Click Mode: Mouse (posisi mouse)"
-	else
-		getgenv().ClickerMode = "Center"
-		ModeCycleBtn.Text = "📍  Center"
-		ModeLabel.Text = "Click Mode: Center (tengah layar)"
-	end
-end)
-
 -- ========== STATS ROW ==========
+local StatsY = SliderY + 66
+
 local StatsRow = Instance.new("Frame")
 StatsRow.Parent = Main
 StatsRow.Size = UDim2.new(1, -28, 0, 56)
-StatsRow.Position = UDim2.new(0, 14, 0, 380)
+StatsRow.Position = UDim2.new(0, 14, 0, StatsY)
 StatsRow.BackgroundColor3 = C.surface
 StatsRow.BorderSizePixel = 0
 StatsRow.ZIndex = 5
@@ -604,15 +589,17 @@ local function createStatBox(x, w, label, accent)
 	return val
 end
 
-local StatSwitch = createStatBox(0, 220, "SWITCHES", C.accent2)
-local StatClicks = createStatBox(224, 220, "CLICKS", C.danger)
-local StatCPS    = createStatBox(448, 220, "CPS", C.warn)
+local StatSwitch = createStatBox(0, 216, "SWITCHES", C.accent2)
+local StatClicks = createStatBox(220, 216, "CLICKS", C.danger)
+local StatCPS    = createStatBox(440, 216, "CPS", C.warn)
 
 -- ========== PLAYER LIST ==========
+local ListHeaderY = StatsY + 66
+
 local ListHeader = Instance.new("Frame")
 ListHeader.Parent = Main
 ListHeader.Size = UDim2.new(1, -28, 0, 20)
-ListHeader.Position = UDim2.new(0, 14, 0, 444)
+ListHeader.Position = UDim2.new(0, 14, 0, ListHeaderY)
 ListHeader.BackgroundTransparency = 1
 ListHeader.ZIndex = 5
 
@@ -661,8 +648,8 @@ end)
 
 local ListFrame = Instance.new("Frame")
 ListFrame.Parent = Main
-ListFrame.Position = UDim2.new(0, 14, 0, 468)
-ListFrame.Size = UDim2.new(1, -28, 1, -490)
+ListFrame.Position = UDim2.new(0, 14, 0, ListHeaderY + 24)
+ListFrame.Size = UDim2.new(1, -28, 1, -(ListHeaderY + 24) - 14)
 ListFrame.BackgroundColor3 = C.surface
 ListFrame.BorderSizePixel = 0
 ListFrame.ZIndex = 5
@@ -686,7 +673,7 @@ ListLayout.Parent = ListScroll
 ListLayout.SortOrder = Enum.SortOrder.LayoutOrder
 ListLayout.Padding = UDim.new(0, 4)
 
--- ========== TOAST (simple) ==========
+-- ========== TOAST ==========
 local ToastFrame = Instance.new("Frame")
 ToastFrame.Parent = Main
 ToastFrame.Size = UDim2.new(0, 260, 0, 36)
@@ -888,7 +875,7 @@ function setTargetCard(plr)
 	TargetStatusDot.BackgroundColor3 = blocked and C.danger or C.success
 end
 
--- ========== CORE FUNCTIONS ==========
+-- ========== CORE ==========
 local function getHRP()
 	if not LP.Character then return nil end
 	return LP.Character:FindFirstChild("HumanoidRootPart")
@@ -954,49 +941,45 @@ local function tweenToTarget(targetInfo)
 	end)
 end
 
--- ========== CLICKER ==========
-local function doClick()
+-- ========== CLICKER (NO VIM) ==========
+local function safeClick()
+	if not CLICK_SUPPORTED then return false end
 	local ok = pcall(function()
-		local pos
-		if getgenv().ClickerMode == "Center" then
-			local cam = workspace.CurrentCamera
-			local vp = cam.ViewportSize
-			pos = Vector2.new(vp.X / 2, vp.Y / 2)
-		else
-			pos = UIS:GetMouseLocation()
+		if HAS_MOUSE1CLICK then
+			mouse1click()
+		elseif HAS_MOUSE_PRESS then
+			mouse1press()
+			task.wait(0.03)
+			mouse1release()
 		end
-		VIM:SendMouseButtonEvent(pos.X, pos.Y, 0, true, game, 0)
-		VIM:SendMouseButtonEvent(pos.X, pos.Y, 0, false, game, 0)
 	end)
-	if ok then getgenv().ClickerCount = getgenv().ClickerCount + 1 end
+	return ok
 end
 
-local function updateGlobalClicker()
-	GCStatus.Text = getgenv().ClickerEnabled and ("ON  •  " .. getgenv().ClickerCPS .. " CPS") or "OFF"
-	GCStatus.TextColor3 = getgenv().ClickerEnabled and C.success or C.textMuted
-	GCName.TextColor3 = getgenv().ClickerEnabled and C.success or C.textDim
+local function updateClicker()
+	CCStatus.Text = getgenv().ClickerEnabled and ("ON  •  " .. getgenv().ClickerCPS .. " CPS") or "OFF"
+	CCStatus.TextColor3 = getgenv().ClickerEnabled and C.success or C.textMuted
+	CCName.TextColor3 = getgenv().ClickerEnabled and C.success or C.textDim
 
 	if getgenv().ClickerEnabled then
-		GCToggle.BackgroundColor3 = C.success
-		GCToggleKnob.Position = UDim2.new(1, -21, 0.5, -9)
-		GCStroke.Color = C.success
-		HeaderClickerLbl.Text = "🖱️  Clicker ON"
-		HeaderClickerLbl.TextColor3 = C.success
-		HeaderBadgeStroke.Color = C.success
+		CCToggle.BackgroundColor3 = C.success
+		CCToggleKnob.Position = UDim2.new(1, -21, 0.5, -9)
+		CCStroke.Color = C.success
 	else
-		GCToggle.BackgroundColor3 = C.surface3
-		GCToggleKnob.Position = UDim2.new(0, 3, 0.5, -9)
-		GCStroke.Color = C.stroke
-		HeaderClickerLbl.Text = "🖱️  Clicker OFF"
-		HeaderClickerLbl.TextColor3 = C.textMuted
-		HeaderBadgeStroke.Color = C.stroke
+		CCToggle.BackgroundColor3 = C.surface3
+		CCToggleKnob.Position = UDim2.new(0, 3, 0.5, -9)
+		CCStroke.Color = C.stroke
 	end
-	GCQuick.Text = "⚙  " .. getgenv().ClickerCPS .. " CPS"
+	CCQuick.Text = "⚙  " .. getgenv().ClickerCPS .. " CPS"
 end
 
 local function toggleClicker()
+	if not CLICK_SUPPORTED then
+		toast("Executor nggak support mouse1click")
+		return
+	end
 	getgenv().ClickerEnabled = not getgenv().ClickerEnabled
-	updateGlobalClicker()
+	updateClicker()
 	toast(getgenv().ClickerEnabled and ("Clicker ON @ " .. getgenv().ClickerCPS .. " CPS") or "Clicker OFF")
 end
 
@@ -1014,9 +997,9 @@ FollowToggleBtn.MouseButton1Click:Connect(function()
 	end
 end)
 
-GCToggle.MouseButton1Click:Connect(toggleClicker)
+CCToggle.MouseButton1Click:Connect(toggleClicker)
 
--- ========== MAIN LOOPS ==========
+-- ========== LOOPS ==========
 -- Follow loop
 task.spawn(function()
 	while task.wait(0.3) do
@@ -1072,22 +1055,28 @@ task.spawn(function()
 	end
 end)
 
--- Clicker loop (pakai interval dinamis biar CPS akurat)
+-- Clicker loop (pakai interval presisi + random jitter kecil biar aman)
 task.spawn(function()
 	while task.wait() do
 		if not ScreenGui.Parent then break end
-		if not getgenv().ClickerEnabled then task.wait(0.1); continue end
-		local cps = math.max(1, math.min(50, getgenv().ClickerCPS))
-		local interval = 1 / cps
+		if not getgenv().ClickerEnabled then
+			task.wait(0.15)
+			continue
+		end
+		local cps = math.max(1, math.min(20, getgenv().ClickerCPS))
+		local baseInterval = 1 / cps
+		-- tambah jitter random 0-40% biar polanya nggak konstan (nggak kaya bot)
+		local jitter = baseInterval * (math.random() * 0.4)
+		local interval = baseInterval + jitter
 		local startTime = tick()
-		doClick()
+		safeClick()
 		local elapsed = tick() - startTime
 		local remaining = interval - elapsed
 		if remaining > 0 then task.wait(remaining) end
 	end
 end)
 
--- Stats updater (ringan)
+-- Stats updater
 task.spawn(function()
 	while task.wait(0.5) do
 		if not ScreenGui.Parent then break end
@@ -1096,6 +1085,25 @@ task.spawn(function()
 		StatCPS.Text = tostring(getgenv().ClickerCPS)
 	end
 end)
+
+-- Update click count
+task.spawn(function()
+	local lastCount = 0
+	while task.wait(0.3) do
+		if not ScreenGui.Parent then break end
+		if getgenv().ClickerCount ~= lastCount then
+			lastCount = getgenv().ClickerCount
+		end
+	end
+end)
+
+-- Increment click counter via hook di safeClick
+local _origSafeClick = safeClick
+safeClick = function()
+	local ok = _origSafeClick()
+	if ok then getgenv().ClickerCount = getgenv().ClickerCount + 1 end
+	return ok
+end
 
 -- ========== LIFECYCLE ==========
 Players.PlayerAdded:Connect(function() task.wait(0.5); refreshPlayerList() end)
@@ -1118,8 +1126,12 @@ end)
 
 -- Init
 updateFollowVisual()
-updateGlobalClicker()
+updateClicker()
 setTargetCard(nil)
 refreshPlayerList()
 
-print("🎯 Follow Player + Clicker (Clean) Loaded")
+if CLICK_SUPPORTED then
+	print("🎯 Follow Player + Clicker (No VIM) Loaded — Clicker pakai mouse1click()")
+else
+	print("🎯 Follow Player Loaded — Clicker disabled (executor gak support mouse API)")
+end
