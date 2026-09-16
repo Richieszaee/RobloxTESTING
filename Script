@@ -1,11 +1,17 @@
 --[[
-	WEBSITE ANALYZER — PRETTY EDITION
-	Modern dark UI • Rounded • Animated • Copy support
+	FOLLOW PLAYER — TWEEN EDITION
+	- Auto follow pakai TweenService
+	- Kalau udah deket → ganti target
+	- Blocklist biar gak follow player tertentu
+	- Pretty GUI
 ]]
 
-local HttpService = game:GetService("HttpService")
-local UIS = game:GetService("UserInputService")
+local Players      = game:GetService("Players")
+local RunService   = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
+local UIS          = game:GetService("UserInputService")
+
+local LP = Players.LocalPlayer
 
 --// Palette
 local C = {
@@ -23,103 +29,68 @@ local C = {
 	textMuted = Color3.fromRGB(110, 110, 130),
 }
 
+--// State
+getgenv().FollowEnabled  = false
+getgenv().FollowSpeed    = 200
+getgenv().SwitchDist     = 6
+getgenv().Blocklist      = {}
+getgenv().CurrentTarget  = nil
+getgenv().ActiveTween    = nil
+
 --// Helpers
-local function corner(parent, r)
+local function corner(p, r)
 	local c = Instance.new("UICorner")
 	c.CornerRadius = UDim.new(0, r or 8)
-	c.Parent = parent
+	c.Parent = p
 	return c
 end
-
-local function stroke(parent, color, thickness)
+local function stroke(p, color, t)
 	local s = Instance.new("UIStroke")
 	s.Color = color or C.stroke
-	s.Thickness = thickness or 1
+	s.Thickness = t or 1
 	s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-	s.Parent = parent
+	s.Parent = p
 	return s
 end
-
-local function padding(parent, p)
-	local u = Instance.new("UIPadding")
-	u.PaddingTop = UDim.new(0, p)
-	u.PaddingBottom = UDim.new(0, p)
-	u.PaddingLeft = UDim.new(0, p)
-	u.PaddingRight = UDim.new(0, p)
-	u.Parent = parent
-	return u
-end
-
-local function gradient(parent, c1, c2, rot)
+local function gradient(p, c1, c2, rot)
 	local g = Instance.new("UIGradient")
 	g.Color = ColorSequence.new(c1, c2)
 	g.Rotation = rot or 0
-	g.Parent = parent
+	g.Parent = p
 	return g
 end
-
-local function hover(btn, baseColor, hoverColor)
-	local enter, leave
-	enter = btn.MouseEnter:Connect(function()
-		TweenService:Create(btn, TweenInfo.new(0.15), {BackgroundColor3 = hoverColor}):Play()
+local function hover(btn, base, hov)
+	btn.MouseEnter:Connect(function()
+		TweenService:Create(btn, TweenInfo.new(0.15), {BackgroundColor3 = hov}):Play()
 	end)
-	leave = btn.MouseLeave:Connect(function()
-		TweenService:Create(btn, TweenInfo.new(0.15), {BackgroundColor3 = baseColor}):Play()
-	end)
-	return function()
-		enter:Disconnect()
-		leave:Disconnect()
-	end
-end
-
-local function clickFx(btn)
-	local origSize = btn.Size
-	btn.MouseButton1Down:Connect(function()
-		TweenService:Create(btn, TweenInfo.new(0.08), {
-			Size = UDim2.new(origSize.X.Scale, origSize.X.Offset, origSize.Y.Scale, origSize.Y.Offset - 2)
-		}):Play()
-	end)
-	btn.MouseButton1Up:Connect(function()
-		TweenService:Create(btn, TweenInfo.new(0.1), {Size = origSize}):Play()
+	btn.MouseLeave:Connect(function()
+		TweenService:Create(btn, TweenInfo.new(0.15), {BackgroundColor3 = base}):Play()
 	end)
 end
 
-local function copyClip(text)
-	local ok = pcall(function()
-		if setclipboard then setclipboard(text)
-		elseif toclipboard then toclipboard(text)
-		else error("no clipboard") end
-	end)
-	return ok
-end
-
---// State
-local CurrentHTML = ""
-local CurrentURL  = ""
-
---// ScreenGui
+--// GUI
 local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "WebAnalyzerPretty"
+ScreenGui.Name = "FollowPlayerGUI"
 ScreenGui.Parent = game:GetService("CoreGui")
 ScreenGui.ResetOnSpawn = false
 ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 
--- Outer glow shadow (fake)
+-- Shadow
 local Shadow = Instance.new("Frame")
 Shadow.Parent = ScreenGui
-Shadow.Size = UDim2.new(0, 820, 0, 620)
-Shadow.Position = UDim2.new(0.5, -406, 0.5, -306)
+Shadow.Size = UDim2.new(0, 620, 0, 560)
+Shadow.Position = UDim2.new(0.5, -306, 0.5, -276)
 Shadow.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 Shadow.BackgroundTransparency = 0.6
 Shadow.BorderSizePixel = 0
 Shadow.ZIndex = 0
 corner(Shadow, 20)
 
---// Main window
+-- Main
 local Main = Instance.new("Frame")
 Main.Parent = ScreenGui
-Main.Size = UDim2.new(0, 820, 0, 620)
-Main.Position = UDim2.new(0.5, -410, 0.5, -310)
+Main.Size = UDim2.new(0, 620, 0, 560)
+Main.Position = UDim2.new(0.5, -310, 0.5, -280)
 Main.BackgroundColor3 = C.bg
 Main.BorderSizePixel = 0
 Main.Active = true
@@ -135,44 +106,15 @@ Header.Size = UDim2.new(1, 0, 0, 56)
 Header.BackgroundColor3 = C.surface
 Header.BorderSizePixel = 0
 corner(Header, 18)
--- Square bottom by adding a small cover
-local HeaderBottom = Instance.new("Frame")
-HeaderBottom.Parent = Header
-HeaderBottom.Size = UDim2.new(1, 0, 0, 18)
-HeaderBottom.Position = UDim2.new(0, 0, 1, -18)
-HeaderBottom.BackgroundColor3 = C.surface
-HeaderBottom.BorderSizePixel = 0
-HeaderBottom.ZIndex = 1
+local HeaderBot = Instance.new("Frame")
+HeaderBot.Parent = Header
+HeaderBot.Size = UDim2.new(1, 0, 0, 18)
+HeaderBot.Position = UDim2.new(0, 0, 1, -18)
+HeaderBot.BackgroundColor3 = C.surface
+HeaderBot.BorderSizePixel = 0
+HeaderBot.ZIndex = 1
+gradient(Header, Color3.fromRGB(90, 60, 200), Color3.fromRGB(60, 130, 200), 90)
 
--- Gradient on header
-gradient(Header, C.accent, C.accent2, 90)
-
-local TitleLbl = Instance.new("TextLabel")
-TitleLbl.Parent = Header
-TitleLbl.BackgroundTransparency = 1
-TitleLbl.Position = UDim2.new(0, 60, 0, 0)
-TitleLbl.Size = UDim2.new(1, -120, 1, 0)
-TitleLbl.Text = "Website Analyzer"
-TitleLbl.TextColor3 = Color3.fromRGB(255, 255, 255)
-TitleLbl.Font = Enum.Font.GothamBold
-TitleLbl.TextSize = 18
-TitleLbl.TextXAlignment = Enum.TextXAlignment.Left
-TitleLbl.ZIndex = 2
-
-local SubLbl = Instance.new("TextLabel")
-SubLbl.Parent = Header
-SubLbl.BackgroundTransparency = 1
-SubLbl.Position = UDim2.new(0, 60, 0, 28)
-SubLbl.Size = UDim2.new(1, -120, 0, 16)
-SubLbl.Text = "fetch  •  analyze  •  copy"
-SubLbl.TextColor3 = Color3.fromRGB(255, 255, 255)
-SubLbl.TextTransparency = 0.25
-SubLbl.Font = Enum.Font.Gotham
-SubLbl.TextSize = 11
-SubLbl.TextXAlignment = Enum.TextXAlignment.Left
-SubLbl.ZIndex = 2
-
--- Icon circle
 local IconCircle = Instance.new("Frame")
 IconCircle.Parent = Header
 IconCircle.Size = UDim2.new(0, 36, 0, 36)
@@ -187,12 +129,36 @@ local IconLbl = Instance.new("TextLabel")
 IconLbl.Parent = IconCircle
 IconLbl.Size = UDim2.new(1, 0, 1, 0)
 IconLbl.BackgroundTransparency = 1
-IconLbl.Text = "🔍"
+IconLbl.Text = "🎯"
 IconLbl.Font = Enum.Font.Gotham
 IconLbl.TextSize = 18
 IconLbl.ZIndex = 3
 
--- Close button
+local TitleLbl = Instance.new("TextLabel")
+TitleLbl.Parent = Header
+TitleLbl.BackgroundTransparency = 1
+TitleLbl.Position = UDim2.new(0, 60, 0, 6)
+TitleLbl.Size = UDim2.new(1, -120, 0, 24)
+TitleLbl.Text = "Follow Player"
+TitleLbl.TextColor3 = Color3.fromRGB(255, 255, 255)
+TitleLbl.Font = Enum.Font.GothamBold
+TitleLbl.TextSize = 18
+TitleLbl.TextXAlignment = Enum.TextXAlignment.Left
+TitleLbl.ZIndex = 2
+
+local SubLbl = Instance.new("TextLabel")
+SubLbl.Parent = Header
+SubLbl.BackgroundTransparency = 1
+SubLbl.Position = UDim2.new(0, 60, 0, 30)
+SubLbl.Size = UDim2.new(1, -120, 0, 16)
+SubLbl.Text = "tween  •  auto-switch  •  blocklist"
+SubLbl.TextColor3 = Color3.fromRGB(255, 255, 255)
+SubLbl.TextTransparency = 0.25
+SubLbl.Font = Enum.Font.Gotham
+SubLbl.TextSize = 11
+SubLbl.TextXAlignment = Enum.TextXAlignment.Left
+SubLbl.ZIndex = 2
+
 local CloseBtn = Instance.new("TextButton")
 CloseBtn.Parent = Header
 CloseBtn.Size = UDim2.new(0, 32, 0, 32)
@@ -206,7 +172,6 @@ CloseBtn.TextSize = 14
 CloseBtn.BorderSizePixel = 0
 CloseBtn.ZIndex = 3
 corner(CloseBtn, 10)
-hover(CloseBtn, Color3.fromRGB(255, 255, 255), Color3.fromRGB(255, 255, 255))
 CloseBtn.MouseEnter:Connect(function()
 	TweenService:Create(CloseBtn, TweenInfo.new(0.15), {BackgroundTransparency = 0.6}):Play()
 end)
@@ -214,644 +179,548 @@ CloseBtn.MouseLeave:Connect(function()
 	TweenService:Create(CloseBtn, TweenInfo.new(0.15), {BackgroundTransparency = 0.85}):Play()
 end)
 CloseBtn.MouseButton1Click:Connect(function()
+	-- Stop semua
+	getgenv().FollowEnabled = false
+	if getgenv().ActiveTween then
+		pcall(function() getgenv().ActiveTween:Cancel() end)
+	end
+	local hum = LP.Character and LP.Character:FindFirstChildOfClass("Humanoid")
+	if hum then hum.PlatformStand = false; hum.WalkSpeed = 16; hum.JumpPower = 50 end
 	ScreenGui:Destroy()
 end)
-
--- URL input container
-local InputRow = Instance.new("Frame")
-InputRow.Parent = Main
-InputRow.Position = UDim2.new(0, 20, 0, 76)
-InputRow.Size = UDim2.new(1, -40, 0, 48)
-InputRow.BackgroundColor3 = C.surface
-InputRow.BorderSizePixel = 0
-corner(InputRow, 12)
-stroke(InputRow, C.stroke, 1)
-
-local UrlBox = Instance.new("TextBox")
-UrlBox.Parent = InputRow
-UrlBox.Position = UDim2.new(0, 14, 0, 0)
-UrlBox.Size = UDim2.new(1, -260, 1, 0)
-UrlBox.BackgroundTransparency = 1
-UrlBox.Text = ""
-UrlBox.PlaceholderText = "https://example.com"
-UrlBox.TextColor3 = C.text
-UrlBox.PlaceholderColor3 = C.textMuted
-UrlBox.Font = Enum.Font.Gotham
-UrlBox.TextSize = 14
-UrlBox.ClearTextOnFocus = false
-UrlBox.TextXAlignment = Enum.TextXAlignment.Left
-
-local AnalyzeBtn = Instance.new("TextButton")
-AnalyzeBtn.Parent = InputRow
-AnalyzeBtn.Size = UDim2.new(0, 110, 0, 36)
-AnalyzeBtn.Position = UDim2.new(1, -236, 0, 6)
-AnalyzeBtn.BackgroundColor3 = C.accent
-AnalyzeBtn.Text = "⚡  Analyze"
-AnalyzeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-AnalyzeBtn.Font = Enum.Font.GothamBold
-AnalyzeBtn.TextSize = 13
-AnalyzeBtn.BorderSizePixel = 0
-corner(AnalyzeBtn, 10)
-gradient(AnalyzeBtn, C.accent, C.accent2, 45)
-clickFx(AnalyzeBtn)
-hover(AnalyzeBtn, C.accent, Color3.fromRGB(140, 110, 255))
-
-local CopyAllBtn = Instance.new("TextButton")
-CopyAllBtn.Parent = InputRow
-CopyAllBtn.Size = UDim2.new(0, 110, 0, 36)
-CopyAllBtn.Position = UDim2.new(1, -120, 0, 6)
-CopyAllBtn.BackgroundColor3 = C.surface2
-CopyAllBtn.Text = "📦  Copy All"
-CopyAllBtn.TextColor3 = C.text
-CopyAllBtn.Font = Enum.Font.GothamBold
-CopyAllBtn.TextSize = 13
-CopyAllBtn.BorderSizePixel = 0
-corner(CopyAllBtn, 10)
-stroke(CopyAllBtn, C.stroke, 1)
-clickFx(CopyAllBtn)
-hover(CopyAllBtn, C.surface2, Color3.fromRGB(45, 45, 60))
 
 -- Status bar
 local StatusRow = Instance.new("Frame")
 StatusRow.Parent = Main
-StatusRow.Position = UDim2.new(0, 20, 0, 132)
-StatusRow.Size = UDim2.new(1, -40, 0, 26)
+StatusRow.Position = UDim2.new(0, 20, 0, 70)
+StatusRow.Size = UDim2.new(1, -40, 0, 30)
 StatusRow.BackgroundColor3 = C.surface
-StatusRow.BackgroundTransparency = 0.5
 StatusRow.BorderSizePixel = 0
-corner(StatusRow, 8)
+corner(StatusRow, 10)
+stroke(StatusRow, C.stroke, 1)
 
 local StatusDot = Instance.new("Frame")
 StatusDot.Parent = StatusRow
 StatusDot.Size = UDim2.new(0, 8, 0, 8)
-StatusDot.Position = UDim2.new(0, 12, 0.5, -4)
+StatusDot.Position = UDim2.new(0, 14, 0.5, -4)
 StatusDot.BackgroundColor3 = C.accent2
 StatusDot.BorderSizePixel = 0
 corner(StatusDot, 4)
 
-local Status = Instance.new("TextLabel")
-Status.Parent = StatusRow
-Status.Position = UDim2.new(0, 28, 0, 0)
-Status.Size = UDim2.new(1, -40, 1, 0)
-Status.BackgroundTransparency = 1
-Status.Text = "Ready. Masukkan URL & klik Analyze."
-Status.TextColor3 = C.textDim
-Status.Font = Enum.Font.Gotham
-Status.TextSize = 12
-Status.TextXAlignment = Enum.TextXAlignment.Left
+local StatusLbl = Instance.new("TextLabel")
+StatusLbl.Parent = StatusRow
+StatusLbl.Position = UDim2.new(0, 30, 0, 0)
+StatusLbl.Size = UDim2.new(1, -42, 1, 0)
+StatusLbl.BackgroundTransparency = 1
+StatusLbl.Text = "Idle — Target: (belum ada)"
+StatusLbl.TextColor3 = C.textDim
+StatusLbl.Font = Enum.Font.Gotham
+StatusLbl.TextSize = 12
+StatusLbl.TextXAlignment = Enum.TextXAlignment.Left
 
--- Tab bar
-local TabBar = Instance.new("Frame")
-TabBar.Parent = Main
-TabBar.Position = UDim2.new(0, 20, 0, 168)
-TabBar.Size = UDim2.new(1, -40, 0, 38)
-TabBar.BackgroundColor3 = C.surface
-TabBar.BorderSizePixel = 0
-corner(TabBar, 12)
-stroke(TabBar, C.stroke, 1)
-padding(TabBar, 4)
-
-local TabLayout = Instance.new("UIListLayout")
-TabLayout.Parent = TabBar
-TabLayout.FillDirection = Enum.FillDirection.Horizontal
-TabLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
-TabLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-TabLayout.Padding = UDim.new(0, 4)
-
-local tabs = {}
-local tabNames = {
-	{label = "Info", icon = "📋"},
-	{label = "Meta", icon = "🏷️"},
-	{label = "Links", icon = "🔗"},
-	{label = "Media", icon = "🖼️"},
-	{label = "Security", icon = "🔒"},
-	{label = "Raw", icon = "📜"},
-}
-local activeTab = "Info"
-
--- Content panel
-local Content = Instance.new("Frame")
-Content.Parent = Main
-Content.Position = UDim2.new(0, 20, 0, 216)
-Content.Size = UDim2.new(1, -40, 1, -290)
-Content.BackgroundColor3 = C.surface
-Content.BorderSizePixel = 0
-corner(Content, 12)
-stroke(Content, C.stroke, 1)
-
-local ContentScroll = Instance.new("ScrollingFrame")
-ContentScroll.Parent = Content
-ContentScroll.Position = UDim2.new(0, 12, 0, 12)
-ContentScroll.Size = UDim2.new(1, -24, 1, -24)
-ContentScroll.BackgroundTransparency = 1
-ContentScroll.BorderSizePixel = 0
-ContentScroll.ScrollBarThickness = 5
-ContentScroll.ScrollBarImageColor3 = C.accent
-ContentScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
-ContentScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
-
-local ContentLayout = Instance.new("UIListLayout")
-ContentLayout.Parent = ContentScroll
-ContentLayout.SortOrder = Enum.SortOrder.LayoutOrder
-ContentLayout.Padding = UDim.new(0, 4)
-
--- Copy bar (bottom)
-local CopyBar = Instance.new("Frame")
-CopyBar.Parent = Main
-CopyBar.Position = UDim2.new(0, 20, 1, -66)
-CopyBar.Size = UDim2.new(1, -40, 0, 46)
-CopyBar.BackgroundColor3 = C.surface
-CopyBar.BorderSizePixel = 0
-corner(CopyBar, 12)
-stroke(CopyBar, C.stroke, 1)
-padding(CopyBar, 6)
-
-local CopyLayout = Instance.new("UIListLayout")
-CopyLayout.Parent = CopyBar
-CopyLayout.FillDirection = Enum.FillDirection.Horizontal
-CopyLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
-CopyLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-CopyLayout.Padding = UDim.new(0, 6)
-
-local function makeActionBtn(text, color, width)
-	local b = Instance.new("TextButton")
-	b.Parent = CopyBar
-	b.Size = UDim2.new(0, width, 1, 0)
-	b.BackgroundColor3 = color
-	b.Text = text
-	b.TextColor3 = Color3.fromRGB(255, 255, 255)
-	b.Font = Enum.Font.GothamMedium
-	b.TextSize = 12
-	b.BorderSizePixel = 0
-	corner(b, 8)
-	clickFx(b)
-	hover(b, color, Color3.fromRGB(
-		math.min(255, color.R * 255 + 25),
-		math.min(255, color.G * 255 + 25),
-		math.min(255, color.B * 255 + 25)
-	))
-	return b
+local function setStatus(txt, color)
+	StatusLbl.Text = txt
+	StatusLbl.TextColor3 = color or C.textDim
 end
 
--- Store tab texts
-local tabTextStore = {}
+-- Controls
+local CtrlRow = Instance.new("Frame")
+CtrlRow.Parent = Main
+CtrlRow.Position = UDim2.new(0, 20, 0, 110)
+CtrlRow.Size = UDim2.new(1, -40, 0, 46)
+CtrlRow.BackgroundColor3 = C.surface
+CtrlRow.BorderSizePixel = 0
+corner(CtrlRow, 12)
+stroke(CtrlRow, C.stroke, 1)
 
--- Content helpers
-local function clearContent()
-	for _, c in ipairs(ContentScroll:GetChildren()) do
-		if c:IsA("TextLabel") or c:IsA("Frame") then c:Destroy() end
+-- Toggle button
+local ToggleBtn = Instance.new("TextButton")
+ToggleBtn.Parent = CtrlRow
+ToggleBtn.Size = UDim2.new(0, 140, 0, 36)
+ToggleBtn.Position = UDim2.new(0, 5, 0, 5)
+ToggleBtn.BackgroundColor3 = C.surface2
+ToggleBtn.Text = "▶  Start Follow"
+ToggleBtn.TextColor3 = C.text
+ToggleBtn.Font = Enum.Font.GothamBold
+ToggleBtn.TextSize = 13
+ToggleBtn.BorderSizePixel = 0
+corner(ToggleBtn, 10)
+stroke(ToggleBtn, C.stroke, 1)
+hover(ToggleBtn, C.surface2, Color3.fromRGB(45, 45, 60))
+
+local function updateToggleVisual()
+	if getgenv().FollowEnabled then
+		ToggleBtn.Text = "■  Stop Follow"
+		ToggleBtn.BackgroundColor3 = C.success
+		ToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+	else
+		ToggleBtn.Text = "▶  Start Follow"
+		ToggleBtn.BackgroundColor3 = C.surface2
+		ToggleBtn.TextColor3 = C.text
 	end
 end
 
-local function tabAppend(text)
-	if not tabTextStore[activeTab] then tabTextStore[activeTab] = {} end
-	table.insert(tabTextStore[activeTab], text)
-end
+-- Speed slider
+local function makeSlider(parent, x, w, name, min, max, default, callback)
+	local box = Instance.new("Frame")
+	box.Parent = parent
+	box.Position = UDim2.new(0, x, 0, 5)
+	box.Size = UDim2.new(0, w, 0, 36)
+	box.BackgroundColor3 = C.surface2
+	box.BorderSizePixel = 0
+	corner(box, 8)
 
-local function resetTabStore(tab)
-	tabTextStore[tab] = {}
-end
-
-local function addLine(text, color, size)
-	tabAppend(text)
 	local lbl = Instance.new("TextLabel")
-	lbl.Parent = ContentScroll
-	lbl.Size = UDim2.new(1, -8, 0, size or 18)
+	lbl.Parent = box
+	lbl.Position = UDim2.new(0, 8, 0, 2)
+	lbl.Size = UDim2.new(1, -16, 0, 14)
 	lbl.BackgroundTransparency = 1
-	lbl.Text = "  " .. text
-	lbl.TextColor3 = color or C.text
-	lbl.Font = Enum.Font.Code
-	lbl.TextSize = 12
+	lbl.Text = name .. ": " .. default
+	lbl.TextColor3 = C.textDim
+	lbl.Font = Enum.Font.Gotham
+	lbl.TextSize = 11
 	lbl.TextXAlignment = Enum.TextXAlignment.Left
-	lbl.TextYAlignment = Enum.TextYAlignment.Top
-	lbl.TextWrapped = true
-	lbl.AutomaticSize = Enum.AutomaticSize.Y
-	return lbl
-end
-
-local function addHeader(text)
-	tabAppend("")
-	tabAppend("━━━ " .. text .. " ━━━")
-	local frame = Instance.new("Frame")
-	frame.Parent = ContentScroll
-	frame.Size = UDim2.new(1, -8, 0, 26)
-	frame.BackgroundColor3 = C.surface2
-	frame.BorderSizePixel = 0
-	corner(frame, 6)
 
 	local bar = Instance.new("Frame")
-	bar.Parent = frame
-	bar.Size = UDim2.new(0, 3, 0.6, 0)
-	bar.Position = UDim2.new(0, 10, 0.2, 0)
-	bar.BackgroundColor3 = C.accent
+	bar.Parent = box
+	bar.Position = UDim2.new(0, 8, 0, 22)
+	bar.Size = UDim2.new(1, -16, 0, 6)
+	bar.BackgroundColor3 = C.bg
 	bar.BorderSizePixel = 0
-	corner(bar, 2)
+	corner(bar, 3)
 
-	local lbl = Instance.new("TextLabel")
-	lbl.Parent = frame
-	lbl.Position = UDim2.new(0, 20, 0, 0)
-	lbl.Size = UDim2.new(1, -24, 1, 0)
-	lbl.BackgroundTransparency = 1
-	lbl.Text = text
-	lbl.TextColor3 = C.text
-	lbl.Font = Enum.Font.GothamBold
-	lbl.TextSize = 12
-	lbl.TextXAlignment = Enum.TextXAlignment.Left
-	return frame
-end
+	local fill = Instance.new("Frame")
+	fill.Parent = bar
+	fill.Size = UDim2.new((default - min) / (max - min), 0, 1, 0)
+	fill.BackgroundColor3 = C.accent
+	fill.BorderSizePixel = 0
+	corner(fill, 3)
 
-local function addKeyValue(key, value, valColor)
-	tabAppend(string.format("%-22s : %s", key, tostring(value)))
-	local frame = Instance.new("Frame")
-	frame.Parent = ContentScroll
-	frame.Size = UDim2.new(1, -8, 0, 20)
-	frame.BackgroundTransparency = 1
+	local hit = Instance.new("TextButton")
+	hit.Parent = box
+	hit.Position = UDim2.new(0, 0, 0, 0)
+	hit.Size = UDim2.new(1, 0, 1, 0)
+	hit.BackgroundTransparency = 1
+	hit.Text = ""
 
-	local k = Instance.new("TextLabel")
-	k.Parent = frame
-	k.Size = UDim2.new(0.28, 0, 1, 0)
-	k.Position = UDim2.new(0, 8, 0, 0)
-	k.BackgroundTransparency = 1
-	k.Text = key
-	k.TextColor3 = C.textMuted
-	k.Font = Enum.Font.GothamMedium
-	k.TextSize = 11
-	k.TextXAlignment = Enum.TextXAlignment.Left
-
-	local v = Instance.new("TextLabel")
-	v.Parent = frame
-	v.Size = UDim2.new(0.72, -16, 1, 0)
-	v.Position = UDim2.new(0.28, 0, 0, 0)
-	v.BackgroundTransparency = 1
-	v.Text = tostring(value)
-	v.TextColor3 = valColor or C.text
-	v.Font = Enum.Font.Code
-	v.TextSize = 12
-	v.TextXAlignment = Enum.TextXAlignment.Left
-	v.TextTruncate = Enum.TextTruncate.AtEnd
-	return frame
-end
-
--- HTML helpers (same as before)
-local function getMeta(html, attr, value)
-	local p1 = '<meta[^>]*' .. attr .. '="' .. value .. '"[^>]*content="([^"]*)"'
-	local p2 = '<meta[^>]*content="([^"]*)"[^>]*' .. attr .. '="' .. value .. '"'
-	return html:match(p1) or html:match(p2)
-end
-
-local function countMatches(str, pattern)
-	local c = 0
-	for _ in str:gmatch(pattern) do c = c + 1 end
-	return c
-end
-
-local function collectMatches(str, pattern)
-	local list = {}
-	for m in str:gmatch(pattern) do table.insert(list, m) end
-	return list
-end
-
-local Analysis = {}
-
-local function analyzeHTML(url, html)
-	local a = {}
-	a.url = url
-	a.html = html
-	a.bytes = #html
-	a.isHttps = url:sub(1, 6) == "https:"
-	a.title = html:match("<title[^>]*>([^<]*)</title>") or ""
-	a.desc = getMeta(html, "name", "description") or ""
-	a.keywords = getMeta(html, "name", "keywords") or ""
-	a.author = getMeta(html, "name", "author") or ""
-	a.lang = html:match('<html[^>]*lang="([^"]*)"') or ""
-	a.charset = html:match('<meta[^>]*charset="([^"]*)"') or html:match('charset=([%w%-]+)') or ""
-	a.ogTitle = getMeta(html, "property", "og:title") or ""
-	a.ogDesc = getMeta(html, "property", "og:description") or ""
-	a.ogImage = getMeta(html, "property", "og:image") or ""
-	a.ogUrl = getMeta(html, "property", "og:url") or ""
-	a.ogType = getMeta(html, "property", "og:type") or ""
-	a.ogSite = getMeta(html, "property", "og:site_name") or ""
-	a.twCard = getMeta(html, "name", "twitter:card") or ""
-	a.twTitle = getMeta(html, "name", "twitter:title") or ""
-	a.twDesc = getMeta(html, "name", "twitter:description") or ""
-	a.twImage = getMeta(html, "name", "twitter:image") or ""
-	a.links = collectMatches(html, '<a[^>]*href="([^"]*)"')
-	a.images = collectMatches(html, '<img[^>]*src="([^"]*)"')
-	a.scripts = collectMatches(html, '<script[^>]*src="([^"]*)"')
-	a.styles = collectMatches(html, '<link[^>]*rel="stylesheet"[^>]*href="([^"]*)"')
-	a.forms = countMatches(html, "<form")
-	a.h1 = countMatches(html, "<h1")
-	a.h2 = countMatches(html, "<h2")
-	a.h3 = countMatches(html, "<h3")
-	a.paragraphs = countMatches(html, "<p[ >]")
-	a.inlineScripts = countMatches(html, "<script[^>]*>") - #a.scripts
-	a.inlineStyles = countMatches(html, "<style[^>]*>")
-	a.hasViewport = html:find('name="viewport"', 1, true) ~= nil
-	a.hasFavicon = html:find('rel="icon"', 1, true) ~= nil or html:find('rel="shortcut icon"', 1, true) ~= nil
-	a.hasCanonical = html:find('rel="canonical"', 1, true) ~= nil
-	a.hasRobots = html:find('name="robots"', 1, true) ~= nil
-
-	local domains = {}
-	local ownDomain = url:match("^https?://([^/]+)") or ""
-	for _, link in ipairs(a.links) do
-		local d = link:match("^https?://([^/]+)")
-		if d and d ~= ownDomain then domains[d] = true end
+	local dragging = false
+	local function update(input)
+		local rel = math.clamp((input.Position.X - bar.AbsolutePosition.X) / bar.AbsoluteSize.X, 0, 1)
+		local v = math.floor(min + (max - min) * rel)
+		fill.Size = UDim2.new(rel, 0, 1, 0)
+		lbl.Text = name .. ": " .. v
+		callback(v)
 	end
-	a.externalDomains = {}
-	for d in pairs(domains) do table.insert(a.externalDomains, d) end
-	table.sort(a.externalDomains)
-	Analysis = a
-end
-
--- Render
-local function renderTab(name)
-	clearContent()
-	resetTabStore(name)
-	if not Analysis.html or Analysis.html == "" then
-		addLine("Belum ada data. Fetch URL dulu.", C.warn)
-		return
-	end
-	local a = Analysis
-
-	if name == "Info" then
-		addHeader("PAGE OVERVIEW")
-		addKeyValue("URL", a.url, C.accent2)
-		addKeyValue("HTTPS", a.isHttps and "Ya" or "Tidak", a.isHttps and C.success or C.danger)
-		addKeyValue("Size", a.bytes .. " bytes (" .. string.format("%.2f", a.bytes/1024) .. " KB)")
-		addKeyValue("Title", a.title ~= "" and a.title or "(kosong)")
-		addKeyValue("Description", a.desc ~= "" and a.desc or "(kosong)")
-		addKeyValue("Lang", a.lang ~= "" and a.lang or "(tidak set)")
-		addKeyValue("Charset", a.charset ~= "" and a.charset or "(tidak set)")
-		addHeader("STRUKTUR")
-		addKeyValue("H1", a.h1)
-		addKeyValue("H2", a.h2)
-		addKeyValue("H3", a.h3)
-		addKeyValue("Paragraphs", a.paragraphs)
-		addKeyValue("Forms", a.forms)
-		addKeyValue("Links", #a.links)
-		addKeyValue("Images", #a.images)
-		addKeyValue("Scripts (external)", #a.scripts)
-		addKeyValue("Scripts (inline)", a.inlineScripts)
-		addKeyValue("Stylesheets", #a.styles)
-
-	elseif name == "Meta" then
-		addHeader("BASIC META")
-		addKeyValue("Title", a.title ~= "" and a.title or "(kosong)")
-		addKeyValue("Description", a.desc ~= "" and a.desc or "(kosong)")
-		addKeyValue("Keywords", a.keywords ~= "" and a.keywords or "(kosong)")
-		addKeyValue("Author", a.author ~= "" and a.author or "(kosong)")
-		addHeader("OPEN GRAPH")
-		addKeyValue("og:title", a.ogTitle ~= "" and a.ogTitle or "(kosong)")
-		addKeyValue("og:description", a.ogDesc ~= "" and a.ogDesc or "(kosong)")
-		addKeyValue("og:type", a.ogType ~= "" and a.ogType or "(kosong)")
-		addKeyValue("og:url", a.ogUrl ~= "" and a.ogUrl or "(kosong)")
-		addKeyValue("og:image", a.ogImage ~= "" and a.ogImage or "(kosong)")
-		addKeyValue("og:site_name", a.ogSite ~= "" and a.ogSite or "(kosong)")
-		addHeader("TWITTER CARD")
-		addKeyValue("twitter:card", a.twCard ~= "" and a.twCard or "(kosong)")
-		addKeyValue("twitter:title", a.twTitle ~= "" and a.twTitle or "(kosong)")
-		addKeyValue("twitter:description", a.twDesc ~= "" and a.twDesc or "(kosong)")
-		addKeyValue("twitter:image", a.twImage ~= "" and a.twImage or "(kosong)")
-
-	elseif name == "Links" then
-		addHeader("LINKS (" .. #a.links .. ")")
-		if #a.links == 0 then addLine("(tidak ada link)", C.textMuted) end
-		for i = 1, #a.links do addLine(string.format("%d. %s", i, a.links[i])) end
-		addHeader("DOMAIN EKSTERNAL (" .. #a.externalDomains .. ")")
-		for _, d in ipairs(a.externalDomains) do addLine("• " .. d, C.warn) end
-
-	elseif name == "Media" then
-		addHeader("IMAGES (" .. #a.images .. ")")
-		if #a.images == 0 then addLine("(tidak ada image)", C.textMuted) end
-		for i = 1, #a.images do addLine(string.format("%d. %s", i, a.images[i])) end
-		addHeader("SCRIPTS (" .. #a.scripts .. ")")
-		for i = 1, #a.scripts do addLine(string.format("%d. %s", i, a.scripts[i])) end
-		addHeader("STYLESHEETS (" .. #a.styles .. ")")
-		for i = 1, #a.styles do addLine(string.format("%d. %s", i, a.styles[i])) end
-
-	elseif name == "Security" then
-		addHeader("SECURITY CHECK")
-		addKeyValue("HTTPS", a.isHttps and "Ya" or "Tidak", a.isHttps and C.success or C.danger)
-		addKeyValue("Viewport meta", a.hasViewport and "Ada" or "Tidak", a.hasViewport and C.success or C.warn)
-		addKeyValue("Favicon", a.hasFavicon and "Ada" or "Tidak", a.hasFavicon and C.success or C.warn)
-		addKeyValue("Canonical URL", a.hasCanonical and "Ada" or "Tidak")
-		addKeyValue("Robots meta", a.hasRobots and "Ada" or "Tidak")
-		addHeader("WARNING")
-		local warns = 0
-		if not a.isHttps then addLine("⚠️ Situs tidak pakai HTTPS!", C.danger); warns = warns + 1 end
-		if not a.hasViewport then addLine("⚠️ Tidak ada viewport meta", C.warn); warns = warns + 1 end
-		if a.title == "" then addLine("⚠️ Tidak ada title tag", C.warn); warns = warns + 1 end
-		if a.desc == "" then addLine("⚠️ Tidak ada meta description", C.warn); warns = warns + 1 end
-		if a.h1 == 0 then addLine("⚠️ Tidak ada tag H1", C.warn); warns = warns + 1 end
-		if a.h1 > 1 then addLine("⚠️ Ada " .. a.h1 .. " tag H1 (sebaiknya 1)", C.warn); warns = warns + 1 end
-		if warns == 0 then addLine("✅ Tidak ada warning", C.success) end
-
-	elseif name == "Raw" then
-		addHeader("RAW HTML (" .. a.bytes .. " bytes)")
-		addLine(a.html)
-	end
-end
-
--- Build text
-local function buildTabText(tab)
-	local lines = tabTextStore[tab] or {}
-	return table.concat(lines, "\n")
-end
-
-local function buildAllText()
-	local parts = {}
-	table.insert(parts, "========================================")
-	table.insert(parts, "WEBSITE ANALYSIS REPORT")
-	table.insert(parts, "========================================")
-	table.insert(parts, "URL   : " .. (Analysis.url or "-"))
-	table.insert(parts, "Date  : " .. os.date("%Y-%m-%d %H:%M:%S"))
-	table.insert(parts, "Size  : " .. (Analysis.bytes or 0) .. " bytes")
-	table.insert(parts, "========================================\n")
-	for _, t in ipairs(tabNames) do
-		local oldActive = activeTab
-		activeTab = t.label
-		resetTabStore(t.label)
-		renderTab(t.label)
-		activeTab = oldActive
-		table.insert(parts, "\n######## " .. t.label .. " ########")
-		table.insert(parts, buildTabText(t.label))
-		table.insert(parts, "")
-	end
-	renderTab(activeTab)
-	return table.concat(parts, "\n")
-end
-
--- Copy handlers
-local function doCopyTab()
-	if not Analysis.html then
-		Status.Text = "❌ Belum ada data untuk di-copy"
-		Status.TextColor3 = C.danger
-		return
-	end
-	local text = buildTabText(activeTab)
-	if #text == 0 then
-		Status.Text = "❌ Tab ini kosong"
-		Status.TextColor3 = C.danger
-		return
-	end
-	if copyClip(text) then
-		Status.Text = "✅ Copied tab " .. activeTab .. " (" .. #text .. " chars)"
-		Status.TextColor3 = C.success
-	else
-		Status.Text = "❌ Gagal copy (setclipboard unsupported)"
-		Status.TextColor3 = C.danger
-	end
-end
-
-local function doCopyAll()
-	if not Analysis.html then
-		Status.Text = "❌ Belum ada data"
-		Status.TextColor3 = C.danger
-		return
-	end
-	Status.Text = "⏳ Building report..."
-	Status.TextColor3 = C.warn
-	task.spawn(function()
-		local text = buildAllText()
-		if copyClip(text) then
-			Status.Text = "✅ Copied SEMUA (" .. #text .. " chars, " .. math.floor(#text/1024) .. " KB)"
-			Status.TextColor3 = C.success
-		else
-			Status.Text = "❌ Gagal copy"
-			Status.TextColor3 = C.danger
+	hit.InputBegan:Connect(function(i)
+		if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+			dragging = true; update(i)
+		end
+	end)
+	hit.InputEnded:Connect(function(i)
+		if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+			dragging = false
+		end
+	end)
+	UIS.InputChanged:Connect(function(i)
+		if dragging and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then
+			update(i)
 		end
 	end)
 end
 
--- Tab buttons
-local function createTab(tabDef, index)
-	local btn = Instance.new("TextButton")
-	btn.Parent = TabBar
-	btn.Size = UDim2.new(0, 108, 1, 0)
-	btn.BackgroundColor3 = C.bg
-	btn.BackgroundTransparency = 0.4
-	btn.BorderSizePixel = 0
-	btn.Text = tabDef.icon .. "  " .. tabDef.label
-	btn.TextColor3 = C.textDim
-	btn.Font = Enum.Font.GothamMedium
-	btn.TextSize = 12
-	corner(btn, 8)
-	clickFx(btn)
-
-	btn.MouseButton1Click:Connect(function()
-		activeTab = tabDef.label
-		for _, t in pairs(tabs) do
-			TweenService:Create(t.btn, TweenInfo.new(0.2), {
-				BackgroundColor3 = C.bg,
-				BackgroundTransparency = 0.4,
-				TextColor3 = C.textDim,
-			}):Play()
-		end
-		TweenService:Create(btn, TweenInfo.new(0.2), {
-			BackgroundColor3 = C.accent,
-			BackgroundTransparency = 0,
-			TextColor3 = Color3.fromRGB(255, 255, 255),
-		}):Play()
-		renderTab(tabDef.label)
-	end)
-
-	btn.MouseEnter:Connect(function()
-		if activeTab ~= tabDef.label then
-			TweenService:Create(btn, TweenInfo.new(0.15), {BackgroundTransparency = 0.1}):Play()
-		end
-	end)
-	btn.MouseLeave:Connect(function()
-		if activeTab ~= tabDef.label then
-			TweenService:Create(btn, TweenInfo.new(0.15), {BackgroundTransparency = 0.4}):Play()
-		end
-	end)
-
-	tabs[tabDef.label] = {btn = btn}
-end
-
--- Action bar buttons
-local CopyTabBtn = makeActionBtn("📋  Copy Tab", Color3.fromRGB(80, 100, 200), 150)
-CopyTabBtn.MouseButton1Click:Connect(doCopyTab)
-
-local CopyAllBarBtn = makeActionBtn("📦  Copy Semua Tab", Color3.fromRGB(110, 70, 200), 180)
-CopyAllBarBtn.MouseButton1Click:Connect(doCopyAll)
-
-local CopyRawBtn = makeActionBtn("📄  Copy Raw HTML", Color3.fromRGB(180, 90, 60), 170)
-CopyRawBtn.MouseButton1Click:Connect(function()
-	if not Analysis.html then
-		Status.Text = "❌ Belum ada data"; Status.TextColor3 = C.danger; return
-	end
-	if copyClip(Analysis.html) then
-		Status.Text = "✅ Copied RAW HTML (" .. #Analysis.html .. " chars)"
-		Status.TextColor3 = C.success
-	else
-		Status.Text = "❌ Gagal copy"; Status.TextColor3 = C.danger
-	end
+makeSlider(CtrlRow, 150, 200, "Speed", 50, 800, 200, function(v)
+	getgenv().FollowSpeed = v
 end)
 
-local CopyURLBtn = makeActionBtn("🔗  Copy URL", Color3.fromRGB(50, 150, 140), 130)
-CopyURLBtn.MouseButton1Click:Connect(function()
-	if Analysis.url and Analysis.url ~= "" then
-		copyClip(Analysis.url)
-		Status.Text = "✅ URL copied!"
-		Status.TextColor3 = C.success
-	end
+makeSlider(CtrlRow, 355, 200, "Switch dist", 3, 30, 6, function(v)
+	getgenv().SwitchDist = v
 end)
 
--- Fetch
-local function fetchAndAnalyze(url)
-	if url == "" then
-		Status.Text = "❌ URL kosong!"
-		Status.TextColor3 = C.danger
-		return
+-- Player list
+local ListLabel = Instance.new("TextLabel")
+ListLabel.Parent = Main
+ListLabel.Position = UDim2.new(0, 22, 0, 168)
+ListLabel.Size = UDim2.new(1, -44, 0, 18)
+ListLabel.BackgroundTransparency = 1
+ListLabel.Text = "PLAYER LIST  (klik nama untuk blocklist)"
+ListLabel.TextColor3 = C.textMuted
+ListLabel.Font = Enum.Font.GothamBold
+ListLabel.TextSize = 11
+ListLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+local ListFrame = Instance.new("Frame")
+ListFrame.Parent = Main
+ListFrame.Position = UDim2.new(0, 20, 0, 190)
+ListFrame.Size = UDim2.new(1, -40, 1, -280)
+ListFrame.BackgroundColor3 = C.surface
+ListFrame.BorderSizePixel = 0
+corner(ListFrame, 12)
+stroke(ListFrame, C.stroke, 1)
+
+local ListScroll = Instance.new("ScrollingFrame")
+ListScroll.Parent = ListFrame
+ListScroll.Position = UDim2.new(0, 8, 0, 8)
+ListScroll.Size = UDim2.new(1, -16, 1, -16)
+ListScroll.BackgroundTransparency = 1
+ListScroll.BorderSizePixel = 0
+ListScroll.ScrollBarThickness = 5
+ListScroll.ScrollBarImageColor3 = C.accent
+ListScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+ListScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+
+local ListLayout = Instance.new("UIListLayout")
+ListLayout.Parent = ListScroll
+ListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+ListLayout.Padding = UDim.new(0, 4)
+
+-- Footer
+local Footer = Instance.new("Frame")
+Footer.Parent = Main
+Footer.Position = UDim2.new(0, 20, 1, -76)
+Footer.Size = UDim2.new(1, -40, 0, 56)
+Footer.BackgroundColor3 = C.surface
+Footer.BorderSizePixel = 0
+corner(Footer, 12)
+stroke(Footer, C.stroke, 1)
+
+local BlockCountLbl = Instance.new("TextLabel")
+BlockCountLbl.Parent = Footer
+BlockCountLbl.Position = UDim2.new(0, 14, 0, 6)
+BlockCountLbl.Size = UDim2.new(1, -180, 0, 20)
+BlockCountLbl.BackgroundTransparency = 1
+BlockCountLbl.Text = "Blocklist: 0 player"
+BlockCountLbl.TextColor3 = C.textDim
+BlockCountLbl.Font = Enum.Font.Gotham
+BlockCountLbl.TextSize = 12
+BlockCountLbl.TextXAlignment = Enum.TextXAlignment.Left
+
+local TargetLbl = Instance.new("TextLabel")
+TargetLbl.Parent = Footer
+TargetLbl.Position = UDim2.new(0, 14, 0, 28)
+TargetLbl.Size = UDim2.new(1, -180, 0, 20)
+TargetLbl.BackgroundTransparency = 1
+TargetLbl.Text = "Following: —"
+TargetLbl.TextColor3 = C.accent2
+TargetLbl.Font = Enum.Font.GothamMedium
+TargetLbl.TextSize = 12
+TargetLbl.TextXAlignment = Enum.TextXAlignment.Left
+
+local ClearBlockBtn = Instance.new("TextButton")
+ClearBlockBtn.Parent = Footer
+ClearBlockBtn.Size = UDim2.new(0, 140, 0, 34)
+ClearBlockBtn.Position = UDim2.new(1, -150, 0.5, -17)
+ClearBlockBtn.BackgroundColor3 = C.surface2
+ClearBlockBtn.Text = "🧹  Clear Blocklist"
+ClearBlockBtn.TextColor3 = C.text
+ClearBlockBtn.Font = Enum.Font.GothamMedium
+ClearBlockBtn.TextSize = 12
+ClearBlockBtn.BorderSizePixel = 0
+corner(ClearBlockBtn, 10)
+stroke(ClearBlockBtn, C.stroke, 1)
+hover(ClearBlockBtn, C.surface2, Color3.fromRGB(45, 45, 60))
+ClearBlockBtn.MouseButton1Click:Connect(function()
+	getgenv().Blocklist = {}
+	setStatus("Blocklist dibersihkan", C.warn)
+end)
+
+-- Log
+local LogLbl = Instance.new("TextLabel")
+LogLbl.Parent = Main
+LogLbl.Position = UDim2.new(0, 22, 1, -100)
+LogLbl.Size = UDim2.new(1, -44, 0, 18)
+LogLbl.BackgroundTransparency = 1
+LogLbl.Text = ""
+LogLbl.TextColor3 = C.textMuted
+LogLbl.Font = Enum.Font.Gotham
+LogLbl.TextSize = 11
+LogLbl.TextXAlignment = Enum.TextXAlignment.Left
+
+local function log(txt, color)
+	LogLbl.Text = txt
+	LogLbl.TextColor3 = color or C.textMuted
+end
+
+-- Player list render
+local function isBlocked(plr)
+	return getgenv().Blocklist[plr.UserId] == true
+end
+
+local function refreshPlayerList()
+	for _, c in ipairs(ListScroll:GetChildren()) do
+		if c:IsA("TextButton") or c:IsA("Frame") then c:Destroy() end
 	end
-	if not url:match("^https?://") then
-		url = "https://" .. url
-		UrlBox.Text = url
-	end
-	Status.Text = "⏳ Fetching " .. url:sub(1, 60) .. "..."
-	Status.TextColor3 = C.warn
-	clearContent()
-	addLine("⏳ Sedang fetch...", C.warn)
-	task.spawn(function()
-		local ok, html = pcall(function()
-			return game:HttpGet(url, true)
+
+	local blockedCount = 0
+	for _ in pairs(getgenv().Blocklist) do blockedCount = blockedCount + 1 end
+	BlockCountLbl.Text = "Blocklist: " .. blockedCount .. " player"
+
+	local allPlayers = Players:GetPlayers()
+	table.sort(allPlayers, function(a, b) return a.Name:lower() < b.Name:lower() end)
+
+	for _, plr in ipairs(allPlayers) do
+		if plr == LP then continue end
+
+		local blocked = isBlocked(plr)
+		local row = Instance.new("TextButton")
+		row.Parent = ListScroll
+		row.Size = UDim2.new(1, -4, 0, 34)
+		row.BackgroundColor3 = blocked and Color3.fromRGB(60, 25, 35) or C.surface2
+		row.BorderSizePixel = 0
+		row.Text = ""
+		row.AutoButtonColor = false
+		corner(row, 8)
+		stroke(row, blocked and C.danger or C.stroke, 1)
+
+		local dot = Instance.new("Frame")
+		dot.Parent = row
+		dot.Size = UDim2.new(0, 8, 0, 8)
+		dot.Position = UDim2.new(0, 14, 0.5, -4)
+		dot.BackgroundColor3 = blocked and C.danger or C.success
+		dot.BorderSizePixel = 0
+		corner(dot, 4)
+
+		local nameLbl = Instance.new("TextLabel")
+		nameLbl.Parent = row
+		nameLbl.Position = UDim2.new(0, 30, 0, 0)
+		nameLbl.Size = UDim2.new(1, -110, 1, 0)
+		nameLbl.BackgroundTransparency = 1
+		nameLbl.Text = plr.Name .. "  (@" .. plr.DisplayName .. ")"
+		nameLbl.TextColor3 = blocked and C.danger or C.text
+		nameLbl.Font = Enum.Font.GothamMedium
+		nameLbl.TextSize = 12
+		nameLbl.TextXAlignment = Enum.TextXAlignment.Left
+		nameLbl.TextTruncate = Enum.TextTruncate.AtEnd
+
+		local tagLbl = Instance.new("TextLabel")
+		tagLbl.Parent = row
+		tagLbl.Position = UDim2.new(1, -90, 0, 0)
+		tagLbl.Size = UDim2.new(0, 80, 1, 0)
+		tagLbl.BackgroundTransparency = 1
+		tagLbl.Text = blocked and "BLOCKED" or "click to block"
+		tagLbl.TextColor3 = blocked and C.danger or C.textMuted
+		tagLbl.Font = Enum.Font.Gotham
+		tagLbl.TextSize = 10
+		tagLbl.TextXAlignment = Enum.TextXAlignment.Right
+
+		row.MouseButton1Click:Connect(function()
+			if isBlocked(plr) then
+				getgenv().Blocklist[plr.UserId] = nil
+				log("Unblocked: " .. plr.Name, C.success)
+			else
+				getgenv().Blocklist[plr.UserId] = true
+				log("Blocked: " .. plr.Name, C.danger)
+				-- Kalau lagi follow player ini, hentikan
+				if getgenv().CurrentTarget == plr then
+					if getgenv().ActiveTween then
+						pcall(function() getgenv().ActiveTween:Cancel() end)
+					end
+					getgenv().CurrentTarget = nil
+				end
+			end
+			refreshPlayerList()
 		end)
-		if not ok or not html or html == "" then
-			Status.Text = "❌ Gagal fetch"
-			Status.TextColor3 = C.danger
-			clearContent()
-			addLine("❌ Gagal fetch URL ini.", C.danger)
-			addLine("Error: " .. tostring(html), Color3.fromRGB(255, 150, 150))
-			return
+
+		row.MouseEnter:Connect(function()
+			TweenService:Create(row, TweenInfo.new(0.12), {BackgroundColor3 = blocked and Color3.fromRGB(80, 30, 40) or Color3.fromRGB(40, 40, 55)}):Play()
+		end)
+		row.MouseLeave:Connect(function()
+			TweenService:Create(row, TweenInfo.new(0.12), {BackgroundColor3 = blocked and Color3.fromRGB(60, 25, 35) or C.surface2}):Play()
+		end)
+	end
+end
+
+-- Player lifecycle
+Players.PlayerAdded:Connect(function() task.wait(0.5); refreshPlayerList() end)
+Players.PlayerRemoving:Connect(function(plr)
+	if getgenv().CurrentTarget == plr then
+		if getgenv().ActiveTween then
+			pcall(function() getgenv().ActiveTween:Cancel() end)
 		end
-		analyzeHTML(url, html)
-		Status.Text = string.format("✅ %s — %d bytes", url:sub(1, 50), #html)
-		Status.TextColor3 = C.success
-		renderTab(activeTab)
+		getgenv().CurrentTarget = nil
+	end
+	task.wait(0.3)
+	refreshPlayerList()
+end)
+
+--// CORE: get target & tween
+local function getHRP()
+	if not LP.Character then return nil end
+	return LP.Character:FindFirstChild("HumanoidRootPart")
+end
+
+local function getHumanoid()
+	if not LP.Character then return nil end
+	return LP.Character:FindFirstChildOfClass("Humanoid")
+end
+
+local function stopTween()
+	if getgenv().ActiveTween then
+		pcall(function() getgenv().ActiveTween:Cancel() end)
+		getgenv().ActiveTween = nil
+	end
+	local hum = getHumanoid()
+	if hum then
+		hum.PlatformStand = false
+	end
+	local hrp = getHRP()
+	if hrp then
+		hrp.Anchored = false
+	end
+end
+
+-- Cari player valid berikutnya (skip blocked & LP, skip yg ga ada char)
+local function pickNextTarget()
+	local myHRP = getHRP()
+	if not myHRP then return nil end
+
+	local candidates = {}
+	for _, plr in ipairs(Players:GetPlayers()) do
+		if plr ~= LP and not isBlocked(plr) then
+			local char = plr.Character
+			if char then
+				local hrp = char:FindFirstChild("HumanoidRootPart")
+				local hum = char:FindFirstChildOfClass("Humanoid")
+				if hrp and hum and hum.Health > 0 then
+					local dist = (myHRP.Position - hrp.Position).Magnitude
+					table.insert(candidates, {plr = plr, hrp = hrp, dist = dist})
+				end
+			end
+		end
+	end
+	table.sort(candidates, function(a, b) return a.dist < b.dist end)
+	return candidates[1]
+end
+
+-- Tween ke target
+local function tweenToTarget(targetInfo, onArrive)
+	local myHRP = getHRP()
+	local hum = getHumanoid()
+	if not myHRP or not hum then return end
+
+	local distance = (myHRP.Position - targetInfo.hrp.Position).Magnitude
+	local duration = distance / getgenv().FollowSpeed
+	if duration < 0.1 then duration = 0.1 end
+
+	hum.PlatformStand = true
+	hum.WalkSpeed = 0
+	hum.JumpPower = 0
+	myHRP.Anchored = true
+
+	local tween = TweenService:Create(
+		myHRP,
+		TweenInfo.new(duration, Enum.EasingStyle.Linear, Enum.EasingDirection.Out),
+		{CFrame = CFrame.new(targetInfo.hrp.Position)}
+	)
+	getgenv().ActiveTween = tween
+	tween:Play()
+	tween.Completed:Connect(function(state)
+		getgenv().ActiveTween = nil
+		if onArrive then onArrive(state) end
 	end)
 end
 
-AnalyzeBtn.MouseButton1Click:Connect(function() fetchAndAnalyze(UrlBox.Text) end)
-UrlBox.FocusLost:Connect(function(enter) if enter then fetchAndAnalyze(UrlBox.Text) end end)
-CopyAllBtn.MouseButton1Click:Connect(doCopyAll)
+--// MAIN LOOP
+task.spawn(function()
+	while task.wait(0.3) do
+		if not ScreenGui.Parent then break end
+		if not getgenv().FollowEnabled then continue end
 
--- Create tabs
-for i, t in ipairs(tabNames) do createTab(t, i) end
--- Activate first tab visual
-local firstBtn = tabs["Info"].btn
-firstBtn.BackgroundColor3 = C.accent
-firstBtn.BackgroundTransparency = 0
-firstBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+		-- Kalau target udah gak valid / kena block → cari baru
+		local cur = getgenv().CurrentTarget
+		local needNew = false
+		if not cur or not cur.Parent then
+			needNew = true
+		elseif isBlocked(cur) then
+			needNew = true
+		elseif not cur.Character or not cur.Character:FindFirstChild("HumanoidRootPart") then
+			needNew = true
+		end
+
+		if needNew then
+			stopTween()
+			local nextInfo = pickNextTarget()
+			if not nextInfo then
+				setStatus("⏸  Tidak ada target valid", C.warn)
+				TargetLbl.Text = "Following: —"
+				task.wait(1)
+				continue
+			end
+			getgenv().CurrentTarget = nextInfo.plr
+			TargetLbl.Text = "Following: " .. nextInfo.plr.Name
+			setStatus("🎯 Following " .. nextInfo.plr.Name, C.accent2)
+			log("→ Target baru: " .. nextInfo.plr.Name, C.accent2)
+		end
+
+		cur = getgenv().CurrentTarget
+		if not cur or not cur.Character then continue end
+		local curHRP = cur.Character:FindFirstChild("HumanoidRootPart")
+		local myHRP = getHRP()
+		if not curHRP or not myHRP then continue end
+
+		local dist = (myHRP.Position - curHRP.Position).Magnitude
+
+		-- Kalau udah deket → ganti target
+		if dist <= getgenv().SwitchDist then
+			setStatus("✅ Deket " .. cur.Name .. " — ganti target", C.success)
+			log("Reached " .. cur.Name .. " (" .. math.floor(dist) .. " studs) — switching", C.success)
+			stopTween()
+			getgenv().CurrentTarget = nil
+			task.wait(0.2)
+			continue
+		end
+
+		-- Kalau ada tween jalan & target gerak, update tween
+		if not getgenv().ActiveTween then
+			local capturedHRP = curHRP
+			local capturedPlr = cur
+			tweenToTarget({hrp = capturedHRP, plr = capturedPlr}, function(state)
+				if state ~= Enum.PlaybackState.Completed then return end
+				if getgenv().CurrentTarget ~= capturedPlr then return end
+				-- Sampai tujuan, tunggu loop berikutnya buat switch
+			end)
+			setStatus(string.format("🏃 Ke %s — %d studs", cur.Name, math.floor(dist)), C.accent2)
+		else
+			-- Update status doang
+			setStatus(string.format("🏃 Ke %s — %d studs", cur.Name, math.floor(dist)), C.accent2)
+		end
+	end
+end)
+
+-- Toggle handler
+ToggleBtn.MouseButton1Click:Connect(function()
+	getgenv().FollowEnabled = not getgenv().FollowEnabled
+	updateToggleVisual()
+	if getgenv().FollowEnabled then
+		setStatus("▶ Follow aktif", C.success)
+		log("Follow started", C.success)
+	else
+		stopTween()
+		getgenv().CurrentTarget = nil
+		TargetLbl.Text = "Following: —"
+		setStatus("■ Follow dimatikan", C.warn)
+		log("Follow stopped", C.warn)
+	end
+end)
+
+-- Character respawn → reset
+LP.CharacterAdded:Connect(function()
+	task.wait(1)
+	stopTween()
+	getgenv().CurrentTarget = nil
+end)
+
+-- Refresh blocklist label
+task.spawn(function()
+	while task.wait(1) do
+		if not ScreenGui.Parent then break end
+		local count = 0
+		for _ in pairs(getgenv().Blocklist) do count = count + 1 end
+		BlockCountLbl.Text = "Blocklist: " .. count .. " player"
+	end
+end)
 
 -- Init
-clearContent()
-addLine("Website Analyzer siap.", C.accent2)
-addLine("")
-addLine("Cara pakai:", C.textDim)
-addLine("  1. Paste URL di kolom atas", C.textMuted)
-addLine("  2. Klik ⚡ Analyze (atau Enter)", C.textMuted)
-addLine("  3. Lihat hasil per tab", C.textMuted)
-addLine("  4. Klik tombol copy di bawah", C.textMuted)
-
-print("🔍 Website Analyzer Pretty Loaded")
+refreshPlayerList()
+updateToggleVisual()
+setStatus("Idle — Target: (belum ada)", C.textDim)
+print("🎯 Follow Player (Tween) Loaded")
