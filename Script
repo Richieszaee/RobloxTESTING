@@ -1,182 +1,411 @@
 --[[
-	WEBSITE ANALYZER + COPY/PASTE
-	- Input URL, fetch, analyze
-	- Tombol COPY per tab
-	- Tombol COPY ALL (semua tab)
-	- Export ke file
+	WEBSITE ANALYZER — PRETTY EDITION
+	Modern dark UI • Rounded • Animated • Copy support
 ]]
 
 local HttpService = game:GetService("HttpService")
 local UIS = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+
+--// Palette
+local C = {
+	bg        = Color3.fromRGB(16, 16, 24),
+	surface   = Color3.fromRGB(24, 24, 34),
+	surface2  = Color3.fromRGB(32, 32, 44),
+	stroke    = Color3.fromRGB(48, 48, 64),
+	accent    = Color3.fromRGB(120, 90, 255),
+	accent2   = Color3.fromRGB(80, 200, 255),
+	success   = Color3.fromRGB(80, 220, 130),
+	danger    = Color3.fromRGB(255, 90, 110),
+	warn      = Color3.fromRGB(255, 190, 80),
+	text      = Color3.fromRGB(230, 230, 240),
+	textDim   = Color3.fromRGB(150, 150, 170),
+	textMuted = Color3.fromRGB(110, 110, 130),
+}
+
+--// Helpers
+local function corner(parent, r)
+	local c = Instance.new("UICorner")
+	c.CornerRadius = UDim.new(0, r or 8)
+	c.Parent = parent
+	return c
+end
+
+local function stroke(parent, color, thickness)
+	local s = Instance.new("UIStroke")
+	s.Color = color or C.stroke
+	s.Thickness = thickness or 1
+	s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	s.Parent = parent
+	return s
+end
+
+local function padding(parent, p)
+	local u = Instance.new("UIPadding")
+	u.PaddingTop = UDim.new(0, p)
+	u.PaddingBottom = UDim.new(0, p)
+	u.PaddingLeft = UDim.new(0, p)
+	u.PaddingRight = UDim.new(0, p)
+	u.Parent = parent
+	return u
+end
+
+local function gradient(parent, c1, c2, rot)
+	local g = Instance.new("UIGradient")
+	g.Color = ColorSequence.new(c1, c2)
+	g.Rotation = rot or 0
+	g.Parent = parent
+	return g
+end
+
+local function hover(btn, baseColor, hoverColor)
+	local enter, leave
+	enter = btn.MouseEnter:Connect(function()
+		TweenService:Create(btn, TweenInfo.new(0.15), {BackgroundColor3 = hoverColor}):Play()
+	end)
+	leave = btn.MouseLeave:Connect(function()
+		TweenService:Create(btn, TweenInfo.new(0.15), {BackgroundColor3 = baseColor}):Play()
+	end)
+	return function()
+		enter:Disconnect()
+		leave:Disconnect()
+	end
+end
+
+local function clickFx(btn)
+	local origSize = btn.Size
+	btn.MouseButton1Down:Connect(function()
+		TweenService:Create(btn, TweenInfo.new(0.08), {
+			Size = UDim2.new(origSize.X.Scale, origSize.X.Offset, origSize.Y.Scale, origSize.Y.Offset - 2)
+		}):Play()
+	end)
+	btn.MouseButton1Up:Connect(function()
+		TweenService:Create(btn, TweenInfo.new(0.1), {Size = origSize}):Play()
+	end)
+end
+
+local function copyClip(text)
+	local ok = pcall(function()
+		if setclipboard then setclipboard(text)
+		elseif toclipboard then toclipboard(text)
+		else error("no clipboard") end
+	end)
+	return ok
+end
 
 --// State
 local CurrentHTML = ""
 local CurrentURL  = ""
 
---// Copy helper
-local function copyToClipboard(text)
-	local ok = pcall(function()
-		if setclipboard then
-			setclipboard(text)
-		elseif toclipboard then
-			toclipboard(text)
-		else
-			error("no clipboard function")
-		end
-	end)
-	return ok
-end
-
---// GUI
+--// ScreenGui
 local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "WebAnalyzer"
+ScreenGui.Name = "WebAnalyzerPretty"
 ScreenGui.Parent = game:GetService("CoreGui")
 ScreenGui.ResetOnSpawn = false
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 
+-- Outer glow shadow (fake)
+local Shadow = Instance.new("Frame")
+Shadow.Parent = ScreenGui
+Shadow.Size = UDim2.new(0, 820, 0, 620)
+Shadow.Position = UDim2.new(0.5, -406, 0.5, -306)
+Shadow.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+Shadow.BackgroundTransparency = 0.6
+Shadow.BorderSizePixel = 0
+Shadow.ZIndex = 0
+corner(Shadow, 20)
+
+--// Main window
 local Main = Instance.new("Frame")
 Main.Parent = ScreenGui
-Main.Size = UDim2.new(0, 780, 0, 600)
-Main.Position = UDim2.new(0.5, -390, 0.5, -300)
-Main.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
+Main.Size = UDim2.new(0, 820, 0, 620)
+Main.Position = UDim2.new(0.5, -410, 0.5, -310)
+Main.BackgroundColor3 = C.bg
 Main.BorderSizePixel = 0
 Main.Active = true
 Main.Draggable = true
+Main.ClipsDescendants = true
+corner(Main, 18)
+stroke(Main, C.stroke, 1)
 
-local TitleBar = Instance.new("Frame")
-TitleBar.Parent = Main
-TitleBar.Size = UDim2.new(1, 0, 0, 34)
-TitleBar.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
-TitleBar.BorderSizePixel = 0
+-- Header
+local Header = Instance.new("Frame")
+Header.Parent = Main
+Header.Size = UDim2.new(1, 0, 0, 56)
+Header.BackgroundColor3 = C.surface
+Header.BorderSizePixel = 0
+corner(Header, 18)
+-- Square bottom by adding a small cover
+local HeaderBottom = Instance.new("Frame")
+HeaderBottom.Parent = Header
+HeaderBottom.Size = UDim2.new(1, 0, 0, 18)
+HeaderBottom.Position = UDim2.new(0, 0, 1, -18)
+HeaderBottom.BackgroundColor3 = C.surface
+HeaderBottom.BorderSizePixel = 0
+HeaderBottom.ZIndex = 1
+
+-- Gradient on header
+gradient(Header, C.accent, C.accent2, 90)
 
 local TitleLbl = Instance.new("TextLabel")
-TitleLbl.Parent = TitleBar
-TitleLbl.Size = UDim2.new(1, -40, 1, 0)
-TitleLbl.Position = UDim2.new(0, 12, 0, 0)
+TitleLbl.Parent = Header
 TitleLbl.BackgroundTransparency = 1
-TitleLbl.Text = "🔍 Website Analyzer + Copy"
-TitleLbl.TextColor3 = Color3.fromRGB(0, 220, 255)
-TitleLbl.Font = Enum.Font.SourceSansBold
-TitleLbl.TextSize = 16
+TitleLbl.Position = UDim2.new(0, 60, 0, 0)
+TitleLbl.Size = UDim2.new(1, -120, 1, 0)
+TitleLbl.Text = "Website Analyzer"
+TitleLbl.TextColor3 = Color3.fromRGB(255, 255, 255)
+TitleLbl.Font = Enum.Font.GothamBold
+TitleLbl.TextSize = 18
 TitleLbl.TextXAlignment = Enum.TextXAlignment.Left
+TitleLbl.ZIndex = 2
 
+local SubLbl = Instance.new("TextLabel")
+SubLbl.Parent = Header
+SubLbl.BackgroundTransparency = 1
+SubLbl.Position = UDim2.new(0, 60, 0, 28)
+SubLbl.Size = UDim2.new(1, -120, 0, 16)
+SubLbl.Text = "fetch  •  analyze  •  copy"
+SubLbl.TextColor3 = Color3.fromRGB(255, 255, 255)
+SubLbl.TextTransparency = 0.25
+SubLbl.Font = Enum.Font.Gotham
+SubLbl.TextSize = 11
+SubLbl.TextXAlignment = Enum.TextXAlignment.Left
+SubLbl.ZIndex = 2
+
+-- Icon circle
+local IconCircle = Instance.new("Frame")
+IconCircle.Parent = Header
+IconCircle.Size = UDim2.new(0, 36, 0, 36)
+IconCircle.Position = UDim2.new(0, 16, 0, 10)
+IconCircle.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+IconCircle.BackgroundTransparency = 0.85
+IconCircle.BorderSizePixel = 0
+corner(IconCircle, 18)
+IconCircle.ZIndex = 2
+
+local IconLbl = Instance.new("TextLabel")
+IconLbl.Parent = IconCircle
+IconLbl.Size = UDim2.new(1, 0, 1, 0)
+IconLbl.BackgroundTransparency = 1
+IconLbl.Text = "🔍"
+IconLbl.Font = Enum.Font.Gotham
+IconLbl.TextSize = 18
+IconLbl.ZIndex = 3
+
+-- Close button
 local CloseBtn = Instance.new("TextButton")
-CloseBtn.Parent = TitleBar
-CloseBtn.Size = UDim2.new(0, 26, 0, 26)
-CloseBtn.Position = UDim2.new(1, -30, 0, 4)
-CloseBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
-CloseBtn.BorderSizePixel = 0
-CloseBtn.Text = "X"
+CloseBtn.Parent = Header
+CloseBtn.Size = UDim2.new(0, 32, 0, 32)
+CloseBtn.Position = UDim2.new(1, -44, 0, 12)
+CloseBtn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+CloseBtn.BackgroundTransparency = 0.85
+CloseBtn.Text = "✕"
 CloseBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-CloseBtn.Font = Enum.Font.SourceSansBold
+CloseBtn.Font = Enum.Font.GothamBold
 CloseBtn.TextSize = 14
-CloseBtn.MouseButton1Click:Connect(function() ScreenGui:Destroy() end)
+CloseBtn.BorderSizePixel = 0
+CloseBtn.ZIndex = 3
+corner(CloseBtn, 10)
+hover(CloseBtn, Color3.fromRGB(255, 255, 255), Color3.fromRGB(255, 255, 255))
+CloseBtn.MouseEnter:Connect(function()
+	TweenService:Create(CloseBtn, TweenInfo.new(0.15), {BackgroundTransparency = 0.6}):Play()
+end)
+CloseBtn.MouseLeave:Connect(function()
+	TweenService:Create(CloseBtn, TweenInfo.new(0.15), {BackgroundTransparency = 0.85}):Play()
+end)
+CloseBtn.MouseButton1Click:Connect(function()
+	ScreenGui:Destroy()
+end)
 
--- URL Bar
-local UrlBar = Instance.new("Frame")
-UrlBar.Parent = Main
-UrlBar.Size = UDim2.new(1, -20, 0, 40)
-UrlBar.Position = UDim2.new(0, 10, 0, 44)
-UrlBar.BackgroundColor3 = Color3.fromRGB(22, 22, 30)
-UrlBar.BorderSizePixel = 0
+-- URL input container
+local InputRow = Instance.new("Frame")
+InputRow.Parent = Main
+InputRow.Position = UDim2.new(0, 20, 0, 76)
+InputRow.Size = UDim2.new(1, -40, 0, 48)
+InputRow.BackgroundColor3 = C.surface
+InputRow.BorderSizePixel = 0
+corner(InputRow, 12)
+stroke(InputRow, C.stroke, 1)
 
 local UrlBox = Instance.new("TextBox")
-UrlBox.Parent = UrlBar
-UrlBox.Size = UDim2.new(1, -220, 1, -8)
-UrlBox.Position = UDim2.new(0, 4, 0, 4)
-UrlBox.BackgroundColor3 = Color3.fromRGB(30, 30, 42)
-UrlBox.BorderSizePixel = 0
+UrlBox.Parent = InputRow
+UrlBox.Position = UDim2.new(0, 14, 0, 0)
+UrlBox.Size = UDim2.new(1, -260, 1, 0)
+UrlBox.BackgroundTransparency = 1
 UrlBox.Text = ""
 UrlBox.PlaceholderText = "https://example.com"
-UrlBox.TextColor3 = Color3.fromRGB(255, 255, 255)
-UrlBox.PlaceholderColor3 = Color3.fromRGB(110, 110, 130)
-UrlBox.Font = Enum.Font.Code
+UrlBox.TextColor3 = C.text
+UrlBox.PlaceholderColor3 = C.textMuted
+UrlBox.Font = Enum.Font.Gotham
 UrlBox.TextSize = 14
 UrlBox.ClearTextOnFocus = false
 UrlBox.TextXAlignment = Enum.TextXAlignment.Left
 
 local AnalyzeBtn = Instance.new("TextButton")
-AnalyzeBtn.Parent = UrlBar
-AnalyzeBtn.Size = UDim2.new(0, 100, 1, -8)
-AnalyzeBtn.Position = UDim2.new(1, -208, 0, 4)
-AnalyzeBtn.BackgroundColor3 = Color3.fromRGB(0, 140, 90)
-AnalyzeBtn.BorderSizePixel = 0
-AnalyzeBtn.Text = "⚡ ANALYZE"
+AnalyzeBtn.Parent = InputRow
+AnalyzeBtn.Size = UDim2.new(0, 110, 0, 36)
+AnalyzeBtn.Position = UDim2.new(1, -236, 0, 6)
+AnalyzeBtn.BackgroundColor3 = C.accent
+AnalyzeBtn.Text = "⚡  Analyze"
 AnalyzeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-AnalyzeBtn.Font = Enum.Font.SourceSansBold
+AnalyzeBtn.Font = Enum.Font.GothamBold
 AnalyzeBtn.TextSize = 13
+AnalyzeBtn.BorderSizePixel = 0
+corner(AnalyzeBtn, 10)
+gradient(AnalyzeBtn, C.accent, C.accent2, 45)
+clickFx(AnalyzeBtn)
+hover(AnalyzeBtn, C.accent, Color3.fromRGB(140, 110, 255))
 
 local CopyAllBtn = Instance.new("TextButton")
-CopyAllBtn.Parent = UrlBar
-CopyAllBtn.Size = UDim2.new(0, 100, 1, -8)
-CopyAllBtn.Position = UDim2.new(1, -104, 0, 4)
-CopyAllBtn.BackgroundColor3 = Color3.fromRGB(60, 80, 180)
+CopyAllBtn.Parent = InputRow
+CopyAllBtn.Size = UDim2.new(0, 110, 0, 36)
+CopyAllBtn.Position = UDim2.new(1, -120, 0, 6)
+CopyAllBtn.BackgroundColor3 = C.surface2
+CopyAllBtn.Text = "📦  Copy All"
+CopyAllBtn.TextColor3 = C.text
+CopyAllBtn.Font = Enum.Font.GothamBold
+CopyAllBtn.TextSize = 13
 CopyAllBtn.BorderSizePixel = 0
-CopyAllBtn.Text = "📋 COPY ALL"
-CopyAllBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-CopyAllBtn.Font = Enum.Font.SourceSansBold
-CopyAllBtn.TextSize = 12
+corner(CopyAllBtn, 10)
+stroke(CopyAllBtn, C.stroke, 1)
+clickFx(CopyAllBtn)
+hover(CopyAllBtn, C.surface2, Color3.fromRGB(45, 45, 60))
 
 -- Status bar
+local StatusRow = Instance.new("Frame")
+StatusRow.Parent = Main
+StatusRow.Position = UDim2.new(0, 20, 0, 132)
+StatusRow.Size = UDim2.new(1, -40, 0, 26)
+StatusRow.BackgroundColor3 = C.surface
+StatusRow.BackgroundTransparency = 0.5
+StatusRow.BorderSizePixel = 0
+corner(StatusRow, 8)
+
+local StatusDot = Instance.new("Frame")
+StatusDot.Parent = StatusRow
+StatusDot.Size = UDim2.new(0, 8, 0, 8)
+StatusDot.Position = UDim2.new(0, 12, 0.5, -4)
+StatusDot.BackgroundColor3 = C.accent2
+StatusDot.BorderSizePixel = 0
+corner(StatusDot, 4)
+
 local Status = Instance.new("TextLabel")
-Status.Parent = Main
-Status.Size = UDim2.new(1, -20, 0, 20)
-Status.Position = UDim2.new(0, 10, 0, 90)
+Status.Parent = StatusRow
+Status.Position = UDim2.new(0, 28, 0, 0)
+Status.Size = UDim2.new(1, -40, 1, 0)
 Status.BackgroundTransparency = 1
-Status.Text = "Ready. Masukkan URL & klik ANALYZE."
-Status.TextColor3 = Color3.fromRGB(0, 220, 255)
-Status.Font = Enum.Font.Code
+Status.Text = "Ready. Masukkan URL & klik Analyze."
+Status.TextColor3 = C.textDim
+Status.Font = Enum.Font.Gotham
 Status.TextSize = 12
 Status.TextXAlignment = Enum.TextXAlignment.Left
 
--- Tabs bar
+-- Tab bar
 local TabBar = Instance.new("Frame")
 TabBar.Parent = Main
-TabBar.Size = UDim2.new(1, -20, 0, 28)
-TabBar.Position = UDim2.new(0, 10, 0, 116)
-TabBar.BackgroundColor3 = Color3.fromRGB(22, 22, 30)
+TabBar.Position = UDim2.new(0, 20, 0, 168)
+TabBar.Size = UDim2.new(1, -40, 0, 38)
+TabBar.BackgroundColor3 = C.surface
 TabBar.BorderSizePixel = 0
+corner(TabBar, 12)
+stroke(TabBar, C.stroke, 1)
+padding(TabBar, 4)
+
+local TabLayout = Instance.new("UIListLayout")
+TabLayout.Parent = TabBar
+TabLayout.FillDirection = Enum.FillDirection.Horizontal
+TabLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
+TabLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+TabLayout.Padding = UDim.new(0, 4)
 
 local tabs = {}
-local tabNames = {"📋 Info", "🏷️ Meta", "🔗 Links", "🖼️ Images", "🔒 Security", "📜 Raw"}
-local activeTab = "📋 Info"
+local tabNames = {
+	{label = "Info", icon = "📋"},
+	{label = "Meta", icon = "🏷️"},
+	{label = "Links", icon = "🔗"},
+	{label = "Media", icon = "🖼️"},
+	{label = "Security", icon = "🔒"},
+	{label = "Raw", icon = "📜"},
+}
+local activeTab = "Info"
 
--- Content area
+-- Content panel
 local Content = Instance.new("Frame")
 Content.Parent = Main
-Content.Size = UDim2.new(1, -20, 1, -200)
-Content.Position = UDim2.new(0, 10, 0, 190)
-Content.BackgroundColor3 = Color3.fromRGB(10, 10, 14)
+Content.Position = UDim2.new(0, 20, 0, 216)
+Content.Size = UDim2.new(1, -40, 1, -290)
+Content.BackgroundColor3 = C.surface
 Content.BorderSizePixel = 0
+corner(Content, 12)
+stroke(Content, C.stroke, 1)
 
-local Scrolling = Instance.new("ScrollingFrame")
-Scrolling.Parent = Content
-Scrolling.Size = UDim2.new(1, -8, 1, -8)
-Scrolling.Position = UDim2.new(0, 4, 0, 4)
-Scrolling.BackgroundTransparency = 1
-Scrolling.BorderSizePixel = 0
-Scrolling.ScrollBarThickness = 8
-Scrolling.CanvasSize = UDim2.new(0, 0, 0, 0)
-Scrolling.AutomaticCanvasSize = Enum.AutomaticSize.Y
+local ContentScroll = Instance.new("ScrollingFrame")
+ContentScroll.Parent = Content
+ContentScroll.Position = UDim2.new(0, 12, 0, 12)
+ContentScroll.Size = UDim2.new(1, -24, 1, -24)
+ContentScroll.BackgroundTransparency = 1
+ContentScroll.BorderSizePixel = 0
+ContentScroll.ScrollBarThickness = 5
+ContentScroll.ScrollBarImageColor3 = C.accent
+ContentScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+ContentScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
 
-local Layout = Instance.new("UIListLayout")
-Layout.Parent = Scrolling
-Layout.SortOrder = Enum.SortOrder.LayoutOrder
-Layout.Padding = UDim.new(0, 3)
+local ContentLayout = Instance.new("UIListLayout")
+ContentLayout.Parent = ContentScroll
+ContentLayout.SortOrder = Enum.SortOrder.LayoutOrder
+ContentLayout.Padding = UDim.new(0, 4)
 
--- RAW text store per tab (buat copy)
+-- Copy bar (bottom)
+local CopyBar = Instance.new("Frame")
+CopyBar.Parent = Main
+CopyBar.Position = UDim2.new(0, 20, 1, -66)
+CopyBar.Size = UDim2.new(1, -40, 0, 46)
+CopyBar.BackgroundColor3 = C.surface
+CopyBar.BorderSizePixel = 0
+corner(CopyBar, 12)
+stroke(CopyBar, C.stroke, 1)
+padding(CopyBar, 6)
+
+local CopyLayout = Instance.new("UIListLayout")
+CopyLayout.Parent = CopyBar
+CopyLayout.FillDirection = Enum.FillDirection.Horizontal
+CopyLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
+CopyLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+CopyLayout.Padding = UDim.new(0, 6)
+
+local function makeActionBtn(text, color, width)
+	local b = Instance.new("TextButton")
+	b.Parent = CopyBar
+	b.Size = UDim2.new(0, width, 1, 0)
+	b.BackgroundColor3 = color
+	b.Text = text
+	b.TextColor3 = Color3.fromRGB(255, 255, 255)
+	b.Font = Enum.Font.GothamMedium
+	b.TextSize = 12
+	b.BorderSizePixel = 0
+	corner(b, 8)
+	clickFx(b)
+	hover(b, color, Color3.fromRGB(
+		math.min(255, color.R * 255 + 25),
+		math.min(255, color.G * 255 + 25),
+		math.min(255, color.B * 255 + 25)
+	))
+	return b
+end
+
+-- Store tab texts
 local tabTextStore = {}
 
 -- Content helpers
 local function clearContent()
-	for _, c in ipairs(Scrolling:GetChildren()) do
+	for _, c in ipairs(ContentScroll:GetChildren()) do
 		if c:IsA("TextLabel") or c:IsA("Frame") then c:Destroy() end
 	end
 end
 
 local function tabAppend(text)
-	local t = activeTab
-	if not tabTextStore[t] then tabTextStore[t] = {} end
-	table.insert(tabTextStore[t], text)
+	if not tabTextStore[activeTab] then tabTextStore[activeTab] = {} end
+	table.insert(tabTextStore[activeTab], text)
 end
 
 local function resetTabStore(tab)
@@ -186,11 +415,11 @@ end
 local function addLine(text, color, size)
 	tabAppend(text)
 	local lbl = Instance.new("TextLabel")
-	lbl.Parent = Scrolling
+	lbl.Parent = ContentScroll
 	lbl.Size = UDim2.new(1, -8, 0, size or 18)
 	lbl.BackgroundTransparency = 1
-	lbl.Text = text
-	lbl.TextColor3 = color or Color3.fromRGB(220, 220, 220)
+	lbl.Text = "  " .. text
+	lbl.TextColor3 = color or C.text
 	lbl.Font = Enum.Font.Code
 	lbl.TextSize = 12
 	lbl.TextXAlignment = Enum.TextXAlignment.Left
@@ -202,44 +431,60 @@ end
 
 local function addHeader(text)
 	tabAppend("")
-	tabAppend("=== " .. text .. " ===")
+	tabAppend("━━━ " .. text .. " ━━━")
+	local frame = Instance.new("Frame")
+	frame.Parent = ContentScroll
+	frame.Size = UDim2.new(1, -8, 0, 26)
+	frame.BackgroundColor3 = C.surface2
+	frame.BorderSizePixel = 0
+	corner(frame, 6)
+
+	local bar = Instance.new("Frame")
+	bar.Parent = frame
+	bar.Size = UDim2.new(0, 3, 0.6, 0)
+	bar.Position = UDim2.new(0, 10, 0.2, 0)
+	bar.BackgroundColor3 = C.accent
+	bar.BorderSizePixel = 0
+	corner(bar, 2)
+
 	local lbl = Instance.new("TextLabel")
-	lbl.Parent = Scrolling
-	lbl.Size = UDim2.new(1, -8, 0, 22)
-	lbl.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
-	lbl.BorderSizePixel = 0
-	lbl.Text = "  " .. text
-	lbl.TextColor3 = Color3.fromRGB(0, 220, 255)
-	lbl.Font = Enum.Font.SourceSansBold
-	lbl.TextSize = 13
+	lbl.Parent = frame
+	lbl.Position = UDim2.new(0, 20, 0, 0)
+	lbl.Size = UDim2.new(1, -24, 1, 0)
+	lbl.BackgroundTransparency = 1
+	lbl.Text = text
+	lbl.TextColor3 = C.text
+	lbl.Font = Enum.Font.GothamBold
+	lbl.TextSize = 12
 	lbl.TextXAlignment = Enum.TextXAlignment.Left
-	return lbl
+	return frame
 end
 
 local function addKeyValue(key, value, valColor)
 	tabAppend(string.format("%-22s : %s", key, tostring(value)))
 	local frame = Instance.new("Frame")
-	frame.Parent = Scrolling
-	frame.Size = UDim2.new(1, -8, 0, 18)
+	frame.Parent = ContentScroll
+	frame.Size = UDim2.new(1, -8, 0, 20)
 	frame.BackgroundTransparency = 1
 
 	local k = Instance.new("TextLabel")
 	k.Parent = frame
 	k.Size = UDim2.new(0.28, 0, 1, 0)
+	k.Position = UDim2.new(0, 8, 0, 0)
 	k.BackgroundTransparency = 1
 	k.Text = key
-	k.TextColor3 = Color3.fromRGB(150, 180, 220)
-	k.Font = Enum.Font.Code
-	k.TextSize = 12
+	k.TextColor3 = C.textMuted
+	k.Font = Enum.Font.GothamMedium
+	k.TextSize = 11
 	k.TextXAlignment = Enum.TextXAlignment.Left
 
 	local v = Instance.new("TextLabel")
 	v.Parent = frame
-	v.Size = UDim2.new(0.72, 0, 1, 0)
+	v.Size = UDim2.new(0.72, -16, 1, 0)
 	v.Position = UDim2.new(0.28, 0, 0, 0)
 	v.BackgroundTransparency = 1
 	v.Text = tostring(value)
-	v.TextColor3 = valColor or Color3.fromRGB(230, 230, 230)
+	v.TextColor3 = valColor or C.text
 	v.Font = Enum.Font.Code
 	v.TextSize = 12
 	v.TextXAlignment = Enum.TextXAlignment.Left
@@ -247,19 +492,7 @@ local function addKeyValue(key, value, valColor)
 	return frame
 end
 
--- HTML helpers
-local function stripTags(html)
-	local t = html
-	t = t:gsub("<script[^>]*>.-</script>", "")
-	t = t:gsub("<style[^>]*>.-</style>", "")
-	t = t:gsub("<!--.-", "")
-	t = t:gsub("<[^>]->", " ")
-	t = t:gsub("&nbsp;", " "):gsub("&amp;", "&"):gsub("&lt;", "<"):gsub("&gt;", ">")
-	t = t:gsub("&quot;", '"'):gsub("&#39;", "'")
-	t = t:gsub("%s+", " ")
-	return t
-end
-
+-- HTML helpers (same as before)
 local function getMeta(html, attr, value)
 	local p1 = '<meta[^>]*' .. attr .. '="' .. value .. '"[^>]*content="([^"]*)"'
 	local p2 = '<meta[^>]*content="([^"]*)"[^>]*' .. attr .. '="' .. value .. '"'
@@ -278,7 +511,6 @@ local function collectMatches(str, pattern)
 	return list
 end
 
--- Analysis store
 local Analysis = {}
 
 local function analyzeHTML(url, html)
@@ -287,31 +519,26 @@ local function analyzeHTML(url, html)
 	a.html = html
 	a.bytes = #html
 	a.isHttps = url:sub(1, 6) == "https:"
-
 	a.title = html:match("<title[^>]*>([^<]*)</title>") or ""
 	a.desc = getMeta(html, "name", "description") or ""
 	a.keywords = getMeta(html, "name", "keywords") or ""
 	a.author = getMeta(html, "name", "author") or ""
 	a.lang = html:match('<html[^>]*lang="([^"]*)"') or ""
 	a.charset = html:match('<meta[^>]*charset="([^"]*)"') or html:match('charset=([%w%-]+)') or ""
-
 	a.ogTitle = getMeta(html, "property", "og:title") or ""
 	a.ogDesc = getMeta(html, "property", "og:description") or ""
 	a.ogImage = getMeta(html, "property", "og:image") or ""
 	a.ogUrl = getMeta(html, "property", "og:url") or ""
 	a.ogType = getMeta(html, "property", "og:type") or ""
 	a.ogSite = getMeta(html, "property", "og:site_name") or ""
-
 	a.twCard = getMeta(html, "name", "twitter:card") or ""
 	a.twTitle = getMeta(html, "name", "twitter:title") or ""
 	a.twDesc = getMeta(html, "name", "twitter:description") or ""
 	a.twImage = getMeta(html, "name", "twitter:image") or ""
-
 	a.links = collectMatches(html, '<a[^>]*href="([^"]*)"')
 	a.images = collectMatches(html, '<img[^>]*src="([^"]*)"')
 	a.scripts = collectMatches(html, '<script[^>]*src="([^"]*)"')
 	a.styles = collectMatches(html, '<link[^>]*rel="stylesheet"[^>]*href="([^"]*)"')
-
 	a.forms = countMatches(html, "<form")
 	a.h1 = countMatches(html, "<h1")
 	a.h2 = countMatches(html, "<h2")
@@ -319,7 +546,6 @@ local function analyzeHTML(url, html)
 	a.paragraphs = countMatches(html, "<p[ >]")
 	a.inlineScripts = countMatches(html, "<script[^>]*>") - #a.scripts
 	a.inlineStyles = countMatches(html, "<style[^>]*>")
-
 	a.hasViewport = html:find('name="viewport"', 1, true) ~= nil
 	a.hasFavicon = html:find('rel="icon"', 1, true) ~= nil or html:find('rel="shortcut icon"', 1, true) ~= nil
 	a.hasCanonical = html:find('rel="canonical"', 1, true) ~= nil
@@ -334,33 +560,29 @@ local function analyzeHTML(url, html)
 	a.externalDomains = {}
 	for d in pairs(domains) do table.insert(a.externalDomains, d) end
 	table.sort(a.externalDomains)
-
 	Analysis = a
 end
 
--- Render per tab
+-- Render
 local function renderTab(name)
 	clearContent()
 	resetTabStore(name)
-
 	if not Analysis.html or Analysis.html == "" then
-		addLine("Belum ada data. Fetch URL dulu.", Color3.fromRGB(255, 180, 0))
+		addLine("Belum ada data. Fetch URL dulu.", C.warn)
 		return
 	end
-
 	local a = Analysis
 
-	if name == "📋 Info" then
-		addHeader("📋 PAGE OVERVIEW")
-		addKeyValue("URL", a.url, Color3.fromRGB(0, 220, 255))
-		addKeyValue("HTTPS", a.isHttps and "Ya" or "Tidak", a.isHttps and Color3.fromRGB(0, 255, 100) or Color3.fromRGB(255, 100, 100))
+	if name == "Info" then
+		addHeader("PAGE OVERVIEW")
+		addKeyValue("URL", a.url, C.accent2)
+		addKeyValue("HTTPS", a.isHttps and "Ya" or "Tidak", a.isHttps and C.success or C.danger)
 		addKeyValue("Size", a.bytes .. " bytes (" .. string.format("%.2f", a.bytes/1024) .. " KB)")
 		addKeyValue("Title", a.title ~= "" and a.title or "(kosong)")
 		addKeyValue("Description", a.desc ~= "" and a.desc or "(kosong)")
 		addKeyValue("Lang", a.lang ~= "" and a.lang or "(tidak set)")
 		addKeyValue("Charset", a.charset ~= "" and a.charset or "(tidak set)")
-
-		addHeader("📐 STRUKTUR")
+		addHeader("STRUKTUR")
 		addKeyValue("H1", a.h1)
 		addKeyValue("H2", a.h2)
 		addKeyValue("H3", a.h3)
@@ -372,81 +594,65 @@ local function renderTab(name)
 		addKeyValue("Scripts (inline)", a.inlineScripts)
 		addKeyValue("Stylesheets", #a.styles)
 
-	elseif name == "🏷️ Meta" then
-		addHeader("📌 BASIC META")
+	elseif name == "Meta" then
+		addHeader("BASIC META")
 		addKeyValue("Title", a.title ~= "" and a.title or "(kosong)")
 		addKeyValue("Description", a.desc ~= "" and a.desc or "(kosong)")
 		addKeyValue("Keywords", a.keywords ~= "" and a.keywords or "(kosong)")
 		addKeyValue("Author", a.author ~= "" and a.author or "(kosong)")
-
-		addHeader("🌐 OPEN GRAPH")
+		addHeader("OPEN GRAPH")
 		addKeyValue("og:title", a.ogTitle ~= "" and a.ogTitle or "(kosong)")
 		addKeyValue("og:description", a.ogDesc ~= "" and a.ogDesc or "(kosong)")
 		addKeyValue("og:type", a.ogType ~= "" and a.ogType or "(kosong)")
 		addKeyValue("og:url", a.ogUrl ~= "" and a.ogUrl or "(kosong)")
 		addKeyValue("og:image", a.ogImage ~= "" and a.ogImage or "(kosong)")
 		addKeyValue("og:site_name", a.ogSite ~= "" and a.ogSite or "(kosong)")
-
-		addHeader("🐦 TWITTER CARD")
+		addHeader("TWITTER CARD")
 		addKeyValue("twitter:card", a.twCard ~= "" and a.twCard or "(kosong)")
 		addKeyValue("twitter:title", a.twTitle ~= "" and a.twTitle or "(kosong)")
 		addKeyValue("twitter:description", a.twDesc ~= "" and a.twDesc or "(kosong)")
 		addKeyValue("twitter:image", a.twImage ~= "" and a.twImage or "(kosong)")
 
-	elseif name == "🔗 Links" then
-		addHeader("🔗 LINKS (" .. #a.links .. ")")
-		if #a.links == 0 then addLine("  (tidak ada link)") end
-		for i = 1, #a.links do
-			addLine(string.format("  %d. %s", i, a.links[i]))
-		end
+	elseif name == "Links" then
+		addHeader("LINKS (" .. #a.links .. ")")
+		if #a.links == 0 then addLine("(tidak ada link)", C.textMuted) end
+		for i = 1, #a.links do addLine(string.format("%d. %s", i, a.links[i])) end
+		addHeader("DOMAIN EKSTERNAL (" .. #a.externalDomains .. ")")
+		for _, d in ipairs(a.externalDomains) do addLine("• " .. d, C.warn) end
 
-		addHeader("🌍 DOMAIN EKSTERNAL (" .. #a.externalDomains .. ")")
-		for _, d in ipairs(a.externalDomains) do
-			addLine("  • " .. d)
-		end
+	elseif name == "Media" then
+		addHeader("IMAGES (" .. #a.images .. ")")
+		if #a.images == 0 then addLine("(tidak ada image)", C.textMuted) end
+		for i = 1, #a.images do addLine(string.format("%d. %s", i, a.images[i])) end
+		addHeader("SCRIPTS (" .. #a.scripts .. ")")
+		for i = 1, #a.scripts do addLine(string.format("%d. %s", i, a.scripts[i])) end
+		addHeader("STYLESHEETS (" .. #a.styles .. ")")
+		for i = 1, #a.styles do addLine(string.format("%d. %s", i, a.styles[i])) end
 
-	elseif name == "🖼️ Images" then
-		addHeader("🖼️ IMAGES (" .. #a.images .. ")")
-		if #a.images == 0 then addLine("  (tidak ada image)") end
-		for i = 1, #a.images do
-			addLine(string.format("  %d. %s", i, a.images[i]))
-		end
-
-		addHeader("📜 SCRIPTS (" .. #a.scripts .. ")")
-		for i = 1, #a.scripts do
-			addLine(string.format("  %d. %s", i, a.scripts[i]))
-		end
-
-		addHeader("🎨 STYLESHEETS (" .. #a.styles .. ")")
-		for i = 1, #a.styles do
-			addLine(string.format("  %d. %s", i, a.styles[i]))
-		end
-
-	elseif name == "🔒 Security" then
-		addHeader("🔒 SECURITY CHECK")
-		addKeyValue("HTTPS", a.isHttps and "Ya" or "Tidak")
-		addKeyValue("Viewport meta", a.hasViewport and "Ada" or "Tidak")
-		addKeyValue("Favicon", a.hasFavicon and "Ada" or "Tidak")
+	elseif name == "Security" then
+		addHeader("SECURITY CHECK")
+		addKeyValue("HTTPS", a.isHttps and "Ya" or "Tidak", a.isHttps and C.success or C.danger)
+		addKeyValue("Viewport meta", a.hasViewport and "Ada" or "Tidak", a.hasViewport and C.success or C.warn)
+		addKeyValue("Favicon", a.hasFavicon and "Ada" or "Tidak", a.hasFavicon and C.success or C.warn)
 		addKeyValue("Canonical URL", a.hasCanonical and "Ada" or "Tidak")
 		addKeyValue("Robots meta", a.hasRobots and "Ada" or "Tidak")
-
-		addHeader("⚠️ WARNING")
+		addHeader("WARNING")
 		local warns = 0
-		if not a.isHttps then addLine("  ⚠️ Situs tidak pakai HTTPS!"); warns = warns + 1 end
-		if not a.hasViewport then addLine("  ⚠️ Tidak ada viewport meta"); warns = warns + 1 end
-		if a.title == "" then addLine("  ⚠️ Tidak ada title tag"); warns = warns + 1 end
-		if a.desc == "" then addLine("  ⚠️ Tidak ada meta description"); warns = warns + 1 end
-		if a.h1 == 0 then addLine("  ⚠️ Tidak ada tag H1"); warns = warns + 1 end
-		if a.h1 > 1 then addLine("  ⚠️ Ada " .. a.h1 .. " tag H1 (sebaiknya 1)"); warns = warns + 1 end
-		if warns == 0 then addLine("  ✅ Tidak ada warning") end
+		if not a.isHttps then addLine("⚠️ Situs tidak pakai HTTPS!", C.danger); warns = warns + 1 end
+		if not a.hasViewport then addLine("⚠️ Tidak ada viewport meta", C.warn); warns = warns + 1 end
+		if a.title == "" then addLine("⚠️ Tidak ada title tag", C.warn); warns = warns + 1 end
+		if a.desc == "" then addLine("⚠️ Tidak ada meta description", C.warn); warns = warns + 1 end
+		if a.h1 == 0 then addLine("⚠️ Tidak ada tag H1", C.warn); warns = warns + 1 end
+		if a.h1 > 1 then addLine("⚠️ Ada " .. a.h1 .. " tag H1 (sebaiknya 1)", C.warn); warns = warns + 1 end
+		if warns == 0 then addLine("✅ Tidak ada warning", C.success) end
 
-	elseif name == "📜 Raw" then
-		addHeader("📜 RAW HTML (" .. a.bytes .. " bytes)")
+	elseif name == "Raw" then
+		addHeader("RAW HTML (" .. a.bytes .. " bytes)")
 		addLine(a.html)
 	end
 end
 
--- Build copy text per tab (dari store)
+-- Build text
 local function buildTabText(tab)
 	local lines = tabTextStore[tab] or {}
 	return table.concat(lines, "\n")
@@ -461,22 +667,17 @@ local function buildAllText()
 	table.insert(parts, "Date  : " .. os.date("%Y-%m-%d %H:%M:%S"))
 	table.insert(parts, "Size  : " .. (Analysis.bytes or 0) .. " bytes")
 	table.insert(parts, "========================================\n")
-
-	for _, tabName in ipairs(tabNames) do
+	for _, t in ipairs(tabNames) do
 		local oldActive = activeTab
-		activeTab = tabName
-		resetTabStore(tabName)
-		renderTab(tabName)
+		activeTab = t.label
+		resetTabStore(t.label)
+		renderTab(t.label)
 		activeTab = oldActive
-
-		table.insert(parts, "\n######## " .. tabName .. " ########")
-		table.insert(parts, buildTabText(tabName))
+		table.insert(parts, "\n######## " .. t.label .. " ########")
+		table.insert(parts, buildTabText(t.label))
 		table.insert(parts, "")
 	end
-
-	-- Kembaliin ke tab yg aktif
 	renderTab(activeTab)
-
 	return table.concat(parts, "\n")
 end
 
@@ -484,241 +685,173 @@ end
 local function doCopyTab()
 	if not Analysis.html then
 		Status.Text = "❌ Belum ada data untuk di-copy"
-		Status.TextColor3 = Color3.fromRGB(255, 100, 100)
+		Status.TextColor3 = C.danger
 		return
 	end
 	local text = buildTabText(activeTab)
 	if #text == 0 then
 		Status.Text = "❌ Tab ini kosong"
-		Status.TextColor3 = Color3.fromRGB(255, 100, 100)
+		Status.TextColor3 = C.danger
 		return
 	end
-	local ok = copyToClipboard(text)
-	if ok then
-		Status.Text = "✅ Copied " .. activeTab .. " (" .. #text .. " chars)"
-		Status.TextColor3 = Color3.fromRGB(0, 255, 120)
+	if copyClip(text) then
+		Status.Text = "✅ Copied tab " .. activeTab .. " (" .. #text .. " chars)"
+		Status.TextColor3 = C.success
 	else
-		Status.Text = "❌ Gagal copy (executor ga support setclipboard)"
-		Status.TextColor3 = Color3.fromRGB(255, 100, 100)
+		Status.Text = "❌ Gagal copy (setclipboard unsupported)"
+		Status.TextColor3 = C.danger
 	end
 end
 
 local function doCopyAll()
 	if not Analysis.html then
-		Status.Text = "❌ Belum ada data untuk di-copy"
-		Status.TextColor3 = Color3.fromRGB(255, 100, 100)
+		Status.Text = "❌ Belum ada data"
+		Status.TextColor3 = C.danger
 		return
 	end
-	Status.Text = "⏳ Building full report..."
-	Status.TextColor3 = Color3.fromRGB(255, 200, 0)
+	Status.Text = "⏳ Building report..."
+	Status.TextColor3 = C.warn
 	task.spawn(function()
 		local text = buildAllText()
-		local ok = copyToClipboard(text)
-		if ok then
+		if copyClip(text) then
 			Status.Text = "✅ Copied SEMUA (" .. #text .. " chars, " .. math.floor(#text/1024) .. " KB)"
-			Status.TextColor3 = Color3.fromRGB(0, 255, 120)
+			Status.TextColor3 = C.success
 		else
-			Status.Text = "❌ Gagal copy (executor ga support setclipboard)"
-			Status.TextColor3 = Color3.fromRGB(255, 100, 100)
+			Status.Text = "❌ Gagal copy"
+			Status.TextColor3 = C.danger
 		end
 	end)
 end
 
--- Tab buttons (dengan tombol COPY di setiap tab)
-local function createTab(name, index)
+-- Tab buttons
+local function createTab(tabDef, index)
 	local btn = Instance.new("TextButton")
 	btn.Parent = TabBar
-	btn.Size = UDim2.new(1/#tabNames, -4, 1, -6)
-	btn.Position = UDim2.new((index-1)/#tabNames, 2, 0, 3)
-	btn.BackgroundColor3 = Color3.fromRGB(35, 35, 48)
+	btn.Size = UDim2.new(0, 108, 1, 0)
+	btn.BackgroundColor3 = C.bg
+	btn.BackgroundTransparency = 0.4
 	btn.BorderSizePixel = 0
-	btn.Text = name
-	btn.TextColor3 = Color3.fromRGB(180, 180, 200)
-	btn.Font = Enum.Font.SourceSansBold
-	btn.TextSize = 11
+	btn.Text = tabDef.icon .. "  " .. tabDef.label
+	btn.TextColor3 = C.textDim
+	btn.Font = Enum.Font.GothamMedium
+	btn.TextSize = 12
+	corner(btn, 8)
+	clickFx(btn)
+
 	btn.MouseButton1Click:Connect(function()
-		activeTab = name
+		activeTab = tabDef.label
 		for _, t in pairs(tabs) do
-			t.btn.BackgroundColor3 = Color3.fromRGB(35, 35, 48)
-			t.btn.TextColor3 = Color3.fromRGB(180, 180, 200)
+			TweenService:Create(t.btn, TweenInfo.new(0.2), {
+				BackgroundColor3 = C.bg,
+				BackgroundTransparency = 0.4,
+				TextColor3 = C.textDim,
+			}):Play()
 		end
-		btn.BackgroundColor3 = Color3.fromRGB(0, 140, 90)
-		btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-		renderTab(name)
+		TweenService:Create(btn, TweenInfo.new(0.2), {
+			BackgroundColor3 = C.accent,
+			BackgroundTransparency = 0,
+			TextColor3 = Color3.fromRGB(255, 255, 255),
+		}):Play()
+		renderTab(tabDef.label)
 	end)
-	tabs[name] = {btn = btn}
+
+	btn.MouseEnter:Connect(function()
+		if activeTab ~= tabDef.label then
+			TweenService:Create(btn, TweenInfo.new(0.15), {BackgroundTransparency = 0.1}):Play()
+		end
+	end)
+	btn.MouseLeave:Connect(function()
+		if activeTab ~= tabDef.label then
+			TweenService:Create(btn, TweenInfo.new(0.15), {BackgroundTransparency = 0.4}):Play()
+		end
+	end)
+
+	tabs[tabDef.label] = {btn = btn}
 end
 
--- Copy bar (di bawah tab)
-local CopyBar = Instance.new("Frame")
-CopyBar.Parent = Main
-CopyBar.Size = UDim2.new(1, -20, 0, 28)
-CopyBar.Position = UDim2.new(0, 10, 0, 158)
-CopyBar.BackgroundColor3 = Color3.fromRGB(18, 18, 26)
-CopyBar.BorderSizePixel = 0
-
-local CopyTabBtn = Instance.new("TextButton")
-CopyTabBtn.Parent = CopyBar
-CopyTabBtn.Size = UDim2.new(0, 180, 1, -4)
-CopyTabBtn.Position = UDim2.new(0, 2, 0, 2)
-CopyTabBtn.BackgroundColor3 = Color3.fromRGB(60, 100, 180)
-CopyTabBtn.BorderSizePixel = 0
-CopyTabBtn.Text = "📋 Copy Tab Ini"
-CopyTabBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-CopyTabBtn.Font = Enum.Font.SourceSansBold
-CopyTabBtn.TextSize = 12
+-- Action bar buttons
+local CopyTabBtn = makeActionBtn("📋  Copy Tab", Color3.fromRGB(80, 100, 200), 150)
 CopyTabBtn.MouseButton1Click:Connect(doCopyTab)
 
-local CopyAllBarBtn = Instance.new("TextButton")
-CopyAllBarBtn.Parent = CopyBar
-CopyAllBarBtn.Size = UDim2.new(0, 200, 1, -4)
-CopyAllBarBtn.Position = UDim2.new(0, 186, 0, 2)
-CopyAllBarBtn.BackgroundColor3 = Color3.fromRGB(100, 60, 180)
-CopyAllBarBtn.BorderSizePixel = 0
-CopyAllBarBtn.Text = "📦 Copy Semua Tab"
-CopyAllBarBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-CopyAllBarBtn.Font = Enum.Font.SourceSansBold
-CopyAllBarBtn.TextSize = 12
+local CopyAllBarBtn = makeActionBtn("📦  Copy Semua Tab", Color3.fromRGB(110, 70, 200), 180)
 CopyAllBarBtn.MouseButton1Click:Connect(doCopyAll)
 
-local CopyRawBtn = Instance.new("TextButton")
-CopyRawBtn.Parent = CopyBar
-CopyRawBtn.Size = UDim2.new(0, 180, 1, -4)
-CopyRawBtn.Position = UDim2.new(0, 390, 0, 2)
-CopyRawBtn.BackgroundColor3 = Color3.fromRGB(180, 100, 60)
-CopyRawBtn.BorderSizePixel = 0
-CopyRawBtn.Text = "📄 Copy Raw HTML"
-CopyRawBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-CopyRawBtn.Font = Enum.Font.SourceSansBold
-CopyRawBtn.TextSize = 12
+local CopyRawBtn = makeActionBtn("📄  Copy Raw HTML", Color3.fromRGB(180, 90, 60), 170)
 CopyRawBtn.MouseButton1Click:Connect(function()
 	if not Analysis.html then
-		Status.Text = "❌ Belum ada data"
-		Status.TextColor3 = Color3.fromRGB(255, 100, 100)
-		return
+		Status.Text = "❌ Belum ada data"; Status.TextColor3 = C.danger; return
 	end
-	local ok = copyToClipboard(Analysis.html)
-	if ok then
+	if copyClip(Analysis.html) then
 		Status.Text = "✅ Copied RAW HTML (" .. #Analysis.html .. " chars)"
-		Status.TextColor3 = Color3.fromRGB(0, 255, 120)
+		Status.TextColor3 = C.success
 	else
-		Status.Text = "❌ Gagal copy"
-		Status.TextColor3 = Color3.fromRGB(255, 100, 100)
+		Status.Text = "❌ Gagal copy"; Status.TextColor3 = C.danger
 	end
 end)
 
-local CopyURLBtn = Instance.new("TextButton")
-CopyURLBtn.Parent = CopyBar
-CopyURLBtn.Size = UDim2.new(0, 100, 1, -4)
-CopyURLBtn.Position = UDim2.new(0, 574, 0, 2)
-CopyURLBtn.BackgroundColor3 = Color3.fromRGB(60, 130, 130)
-CopyURLBtn.BorderSizePixel = 0
-CopyURLBtn.Text = "🔗 Copy URL"
-CopyURLBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-CopyURLBtn.Font = Enum.Font.SourceSansBold
-CopyURLBtn.TextSize = 12
+local CopyURLBtn = makeActionBtn("🔗  Copy URL", Color3.fromRGB(50, 150, 140), 130)
 CopyURLBtn.MouseButton1Click:Connect(function()
 	if Analysis.url and Analysis.url ~= "" then
-		copyToClipboard(Analysis.url)
+		copyClip(Analysis.url)
 		Status.Text = "✅ URL copied!"
-		Status.TextColor3 = Color3.fromRGB(0, 255, 120)
+		Status.TextColor3 = C.success
 	end
 end)
 
--- Main fetch
+-- Fetch
 local function fetchAndAnalyze(url)
 	if url == "" then
 		Status.Text = "❌ URL kosong!"
-		Status.TextColor3 = Color3.fromRGB(255, 100, 100)
+		Status.TextColor3 = C.danger
 		return
 	end
 	if not url:match("^https?://") then
 		url = "https://" .. url
 		UrlBox.Text = url
 	end
-
 	Status.Text = "⏳ Fetching " .. url:sub(1, 60) .. "..."
-	Status.TextColor3 = Color3.fromRGB(255, 200, 0)
+	Status.TextColor3 = C.warn
 	clearContent()
-	addLine("⏳ Sedang fetch...", Color3.fromRGB(255, 200, 0))
-
+	addLine("⏳ Sedang fetch...", C.warn)
 	task.spawn(function()
 		local ok, html = pcall(function()
 			return game:HttpGet(url, true)
 		end)
-
 		if not ok or not html or html == "" then
 			Status.Text = "❌ Gagal fetch"
-			Status.TextColor3 = Color3.fromRGB(255, 100, 100)
+			Status.TextColor3 = C.danger
 			clearContent()
-			addLine("❌ Gagal fetch URL ini.", Color3.fromRGB(255, 100, 100))
+			addLine("❌ Gagal fetch URL ini.", C.danger)
 			addLine("Error: " .. tostring(html), Color3.fromRGB(255, 150, 150))
 			return
 		end
-
 		analyzeHTML(url, html)
 		Status.Text = string.format("✅ %s — %d bytes", url:sub(1, 50), #html)
-		Status.TextColor3 = Color3.fromRGB(0, 255, 120)
+		Status.TextColor3 = C.success
 		renderTab(activeTab)
 	end)
 end
 
 AnalyzeBtn.MouseButton1Click:Connect(function() fetchAndAnalyze(UrlBox.Text) end)
-CopyAllBtn.MouseButton1Click:Connect(doCopyAll)
 UrlBox.FocusLost:Connect(function(enter) if enter then fetchAndAnalyze(UrlBox.Text) end end)
+CopyAllBtn.MouseButton1Click:Connect(doCopyAll)
 
 -- Create tabs
-for i, name in ipairs(tabNames) do createTab(name, i) end
-tabs["📋 Info"].btn.BackgroundColor3 = Color3.fromRGB(0, 140, 90)
-tabs["📋 Info"].btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-
--- Quick examples
-local QuickBar = Instance.new("Frame")
-QuickBar.Parent = Main
-QuickBar.Size = UDim2.new(1, -20, 0, 22)
-QuickBar.Position = UDim2.new(0, 10, 0, 130)
-QuickBar.BackgroundTransparency = 1
-
-local examples = {
-	{label = "example.com", url = "https://example.com"},
-	{label = "github.com", url = "https://github.com"},
-	{label = "roblox.com", url = "https://www.roblox.com"},
-	{label = "wikipedia", url = "https://en.wikipedia.org/wiki/Roblox"},
-	{label = "httpbin", url = "https://httpbin.org/html"},
-}
-
-local xOff = 0
-for _, ex in ipairs(examples) do
-	local b = Instance.new("TextButton")
-	b.Parent = QuickBar
-	b.Size = UDim2.new(0, 100, 1, 0)
-	b.Position = UDim2.new(0, xOff, 0, 0)
-	b.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
-	b.BorderSizePixel = 0
-	b.Text = ex.label
-	b.TextColor3 = Color3.fromRGB(180, 200, 255)
-	b.Font = Enum.Font.Code
-	b.TextSize = 11
-	b.MouseButton1Click:Connect(function()
-		UrlBox.Text = ex.url
-		fetchAndAnalyze(ex.url)
-	end)
-	xOff = xOff + 104
-end
+for i, t in ipairs(tabNames) do createTab(t, i) end
+-- Activate first tab visual
+local firstBtn = tabs["Info"].btn
+firstBtn.BackgroundColor3 = C.accent
+firstBtn.BackgroundTransparency = 0
+firstBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 
 -- Init
 clearContent()
-addLine("🔍 Website Analyzer + Copy siap.", Color3.fromRGB(0, 220, 255))
+addLine("Website Analyzer siap.", C.accent2)
 addLine("")
-addLine("Cara pakai:", Color3.fromRGB(200, 200, 200))
-addLine("  1. Paste URL di kolom atas", Color3.fromRGB(180, 180, 180))
-addLine("  2. Klik ⚡ ANALYZE (atau Enter)", Color3.fromRGB(180, 180, 180))
-addLine("  3. Lihat hasil per tab", Color3.fromRGB(180, 180, 180))
-addLine("  4. Klik tombol COPY di bawah tab:", Color3.fromRGB(180, 180, 180))
-addLine("     • 📋 Copy Tab Ini   — copy tab yg sedang aktif", Color3.fromRGB(180, 180, 180))
-addLine("     • 📦 Copy Semua Tab — copy SEMUA tab sekaligus", Color3.fromRGB(180, 180, 180))
-addLine("     • 📄 Copy Raw HTML  — copy HTML mentah lengkap", Color3.fromRGB(180, 180, 180))
-addLine("     • 🔗 Copy URL       — copy URL yg dianalisis", Color3.fromRGB(180, 180, 180))
+addLine("Cara pakai:", C.textDim)
+addLine("  1. Paste URL di kolom atas", C.textMuted)
+addLine("  2. Klik ⚡ Analyze (atau Enter)", C.textMuted)
+addLine("  3. Lihat hasil per tab", C.textMuted)
+addLine("  4. Klik tombol copy di bawah", C.textMuted)
 
-print("🔍 Website Analyzer + Copy Loaded")
-print("Tip: pakai setclipboard() → hasil bisa dipaste di mana aja")
+print("🔍 Website Analyzer Pretty Loaded")
